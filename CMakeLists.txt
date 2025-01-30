@@ -20,7 +20,8 @@ find_package(CUDAToolkit REQUIRED)
 find_package(hnswlib REQUIRED)
 
 # Boost
-find_package(Boost REQUIRED COMPONENTS system filesystem)
+find_package(Python REQUIRED COMPONENTS Interpreter Development NumPy)
+find_package(Boost REQUIRED COMPONENTS system filesystem numpy)
 include_directories(${Boost_INCLUDE_DIRS})
 
 include(GNUInstallDirs)
@@ -49,6 +50,10 @@ link_directories("/root/opt-dev/lib")
 set(LOG_TAG_QUERIES_SENDING_START 10000)
 set(LOG_TAG_QUERIES_SENDING_END 10001)
 set(LOG_TAG_QUERIES_RESULT_CLIENT_RECEIVED 10100)
+
+add_executable(build_hnsw_index benchmark/perf_data/hnsw/build_hnsw_index.cpp)
+target_include_directories(build_hnsw_index PRIVATE ${CMAKE_SOURCE_DIR}/benchmark/perf_data/hnsw ${Python_INCLUDE_DIRS} ${Python_NumPy_INCLUDE_DIRS})
+target_link_libraries(build_hnsw_index Boost::python Boost::numpy ${Python_LIBRARIES})
 
 add_executable(run_benchmark benchmark/benchmark_client.cpp benchmark/run_benchmark.cpp benchmark/benchmark_dataset.cpp vortex_udls/serialize_utils.cpp)
 target_link_libraries(run_benchmark derecho::cascade)
@@ -227,6 +232,10 @@ add_custom_command(TARGET aggregate_generate_udl POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/clear_log.sh
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/clear_log.sh.tmp
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/clear_log.sh
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n1/perf_data
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/perf_data
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
