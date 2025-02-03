@@ -136,25 +136,4 @@ if (Python3_FOUND)
 
     target_link_libraries(python_udl_manager cascade Python3::Python Python3::NumPy)
 
-    # add_custom_command(TARGET python_udl_manager POST_BUILD
-    #     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/python_udls
-    #         ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
-    #     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
-    #         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/python_udls
-    #     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
-    #         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n1/python_udls
-    #     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
-    #         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/python_udls
-    #     COMMAND echo \'\#!/usr/bin/env bash\' > ${CMAKE_CURRENT_BINARY_DIR}/show_cascade_python_udl.sh
-    #     COMMAND echo "PYTHONUDL=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/$<TARGET_FILE_NAME:python_udl_manager>" >> ${CMAKE_CURRENT_BINARY_DIR}/show_cascade_python_udl.sh
-    #     COMMAND echo \'echo $$\{PYTHONUDL\}\' >> ${CMAKE_CURRENT_BINARY_DIR}/show_cascade_python_udl.sh
-    #     COMMAND chmod 755 ${CMAKE_CURRENT_BINARY_DIR}/show_cascade_python_udl.sh
-    #     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cfg/run.sh.tmp
-    #             ${CMAKE_CURRENT_SOURCE_DIR}/cfg/layout.json.tmp
-    #             ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json.tmp
-    #             ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg.tmp
-    #             ${CMAKE_CURRENT_SOURCE_DIR}/cfg/python_udls/sample_udls.py
-    #     COMMENT "prepare python_udl configuration"
-    # )
-
 endif()

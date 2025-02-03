@@ -759,9 +759,10 @@ private:
                     "The second argument, value, is NOT a NumPy array!");
             return nullptr;
         }
-        PyArrayObject *ndarray = reinterpret_cast<PyArrayObject*>(value);
+        // Change the emit type to byte object for customizable serialization schemes
+        // PyArrayObject *ndarray = reinterpret_cast<PyArrayObject*>(value);
         /* STEP 3: Call _emit_func. */
-        uint8_t * data = reinterpret_cast<uint8_t*>(PyArray_DATA(ndarray));
+        uint8_t * data = reinterpret_cast<uint8_t*>(PyBytes_AsString(value));
         Blob blob_wrapper(data, static_cast<std::size_t>(PyArray_NBYTES(ndarray)), true);
 
         (*_emit_func)(std::string(key)
