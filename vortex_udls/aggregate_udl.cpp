@@ -1,4 +1,4 @@
-#include "aggregate_generate_udl.hpp"
+#include "aggregate_udl.hpp"
 
 namespace derecho {
 namespace cascade {

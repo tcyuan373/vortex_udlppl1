@@ -59,11 +59,7 @@
                         "batch_time_us":1000,
                         "min_batch_size":1,
                         "max_batch_size":100,
-                        "num_threads": 1,
-                        "include_llm":false,
-                        "retrieve_docs":false,
-                        "openai_api_key":"your_openai_api_key",
-                        "llm_model_name":"gpt-4o-mini"
+                        "num_threads": 1
                 }],
                 "destinations": [{}]
             }
