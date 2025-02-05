@@ -9,8 +9,8 @@ from derecho.cascade.external_client import ServiceClientAPI
 
 if __name__ == "__main__":
     capi = ServiceClientAPI()
+    key = "/print/1"
     value = ["hello", "world"]
-    key = "/rag/doc/1"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     subgroup_index = 0
     shard_index = 0
