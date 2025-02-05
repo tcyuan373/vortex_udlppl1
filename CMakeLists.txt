@@ -53,18 +53,24 @@ add_subdirectory(benchmark)
 add_subdirectory(vortex_udls)
 
 # Copy the configurations after the executables are built
-add_dependencies(start_webservice run_benchmark build_hnsw_index)
+add_dependencies(start_webservice run_benchmark build_hnsw_index python_udl_manager)
 add_custom_command(TARGET start_webservice POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/cfg
         ${CMAKE_CURRENT_BINARY_DIR}/cfg
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/vortex_udls/python/python_udls
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/layout.json.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/dfgs.json.tmp
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/udl_dlls.cfg.tmp
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/perf_data
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/perf_data
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/setup
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/setup
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/pipeline_client
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/pipeline_client
         ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
     # Create symlinks for the build index executables
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/build_hnsw_index
