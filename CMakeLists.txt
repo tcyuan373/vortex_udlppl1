@@ -44,28 +44,16 @@ include_directories(
     $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>
 )
 
-# Client log tags
-set(LOG_TAG_QUERIES_SENDING_START 10000)
-set(LOG_TAG_QUERIES_SENDING_END 10001)
-set(LOG_TAG_QUERIES_RESULT_CLIENT_RECEIVED 10100)
 
-add_executable(build_hnsw_index benchmark/perf_data/hnsw/build_hnsw_index.cpp)
-target_include_directories(build_hnsw_index PRIVATE ${CMAKE_SOURCE_DIR}/benchmark/perf_data/hnsw ${Python_INCLUDE_DIRS} ${Python_NumPy_INCLUDE_DIRS})
-target_link_libraries(build_hnsw_index Boost::python Boost::numpy ${Python_LIBRARIES})
-
-add_executable(run_benchmark benchmark/benchmark_client.cpp benchmark/run_benchmark.cpp benchmark/benchmark_dataset.cpp vortex_udls/serialize_utils.cpp)
-target_link_libraries(run_benchmark derecho::cascade)
-target_compile_definitions(run_benchmark PRIVATE
-    LOG_TAG_QUERIES_SENDING_START=${LOG_TAG_QUERIES_SENDING_START}
-    LOG_TAG_QUERIES_SENDING_END=${LOG_TAG_QUERIES_SENDING_END}
-    LOG_TAG_QUERIES_RESULT_CLIENT_RECEIVED=${LOG_TAG_QUERIES_RESULT_CLIENT_RECEIVED}
-)
 
 add_executable(start_webservice webservice/start_webservice.cpp webservice/webservice.cpp webservice/vortex_webservice.cpp webservice/cascade_client.cpp vortex_udls/serialize_utils.cpp)
 target_link_libraries(start_webservice ${Boost_LIBRARIES} derecho::cascade)
 
+add_subdirectory(benchmark)
 add_subdirectory(vortex_udls)
 
+# Copy the configurations after the executables are built
+add_dependencies(start_webservice run_benchmark build_hnsw_index)
 add_custom_command(TARGET start_webservice POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/cfg
         ${CMAKE_CURRENT_BINARY_DIR}/cfg
@@ -76,6 +64,9 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/perf_data
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/setup
+    # Create symlinks for the build index executables
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/build_hnsw_index
+        ${CMAKE_CURRENT_BINARY_DIR}/perf_data/build_hnsw_index
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/layout.json
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
@@ -144,11 +135,11 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/setup
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/setup
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/run_benchmark
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/run_benchmark
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/run_benchmark
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/start_webservice

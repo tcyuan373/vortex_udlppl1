@@ -284,6 +284,7 @@ void GroupedEmbeddingsForSearch::initialize_cpu_hnsw_search(int cluster_id) {
           this->l2_space = std::make_unique<hnswlib::L2Space>(this->emb_dim);
           this->cpu_hnsw_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(l2_space.get(), cluster_file);
      } else {
+          dbg_default_info("Building hnsw index: {}", cluster_file.string());
           this->l2_space = std::make_unique<hnswlib::L2Space>(this->emb_dim);
           this->cpu_hnsw_index = std::make_unique<hnswlib::HierarchicalNSW<float>>(l2_space.get(), this->num_embs, m, ef);
 

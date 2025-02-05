@@ -1,6 +1,6 @@
-# Construct the dataset
+# Construct Dataset and Prebuild Indices
 
-## Gist dataset
+## Dataset
 
 ### 1. Download the dataset
 Download the gist dataset could simply be done via running the download script we provided
@@ -24,3 +24,33 @@ To get balanced knn clustering datasets, first needs to compile and build the gp
 To run gp-ann to generate balanced clustering, you can run with -b flag
 
 ``` python format_gist.py -b --embeddings_loc /path/to/save/embeddings --ncentroids 5 --gp_ann_loc ./gp-ann```
+
+## Prebuild Indices for HNSW
+Building HNSW indices take a long time. Vortex allows one to load prebuilt indices. The source code is under the `benchmark/hnsw_index/` directory
+
+**Building Indicies**
+
+1. Locate the dataset folder under `benchmark/perf_data`. The dataset folder should container a `centroids.pkl` file and multiple `cluster_*.pkl` files.
+2. If those two files do not exist as in the case of the gist dataset, run `format_gist.py`
+3. The built executable for hnsw_index is at `{build_directory}/perf_data/build_hnsw_index`. It takes dataset directory via arguments `./build_hnsw_index {embedding_dir} {index_dir to store the prebuild indecies} -m {hnsw_m} -e {ef_construction}`. After cd into `{build_directory}/perf_data/` directory, for exmample, if the dataset is called miniset, then the build command will look like `./build_hnsw_index miniset hnsw_index/miniset -m 100 200 -e 200 500`
+
+
+**Loading Indicies**
+
+To configure the cluster search udl to load the correct dataset when using hnsw, configure the `faiss_search_type` to 3 and `dataset_name` to match the name of the folder in benchmark/hnsw_index.
+
+```
+"user_defined_logic_config_list": [
+{
+      "emb_dim":1024,
+      "top_k":3,
+      "faiss_search_type":3,
+      "dataset_name": "perf_data/hnsw_index/miniset", // folder containing the prebuilt indicies
+      "hnsw_m": 100,                 // hnsw graph connectedness
+      "hnsw_ef_construction": 200,  // hnsw exploration factor for construction
+      "hnsw_ef_search:" 100         // hnsw exploration factor for search
+}],
+```
+
+Note: the code looks at M, EF_CONSTRUCTION, and EF_SEARCH in `grouped_embeddings_for_search.hpp` to try and load the correct prebuilt index.
+If it could find the corresponding prebuild hnsw bin with matching hnsw_m and hnsw_ef_construction, then it will load and use the prebuild indecies, otherwise, it will construct the indecies on-the-fly. 
