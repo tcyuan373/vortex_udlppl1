@@ -36,8 +36,8 @@
                         "top_k":20,
                         "faiss_search_type":3,
                         "dataset_name": "perf_data/hnsw_index/miniset",
-                        "hnsw_m": 48,
-                        "hnsw_ef_construction": 300,
+                        "hnsw_m": 100,
+                        "hnsw_ef_construction": 200,
                         "hnsw_ef_search": 200,
                         "min_batch_size":1,
                         "max_batch_size":100,
@@ -59,11 +59,7 @@
                         "batch_time_us":1000,
                         "min_batch_size":1,
                         "max_batch_size":100,
-                        "num_threads": 1,
-                        "include_llm":false,
-                        "retrieve_docs":false,
-                        "openai_api_key":"your_openai_api_key",
-                        "llm_model_name":"gpt-4o-mini"
+                        "num_threads": 1
                 }],
                 "destinations": [{}]
             }

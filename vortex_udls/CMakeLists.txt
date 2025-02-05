@@ -92,13 +92,13 @@ set(LOG_TAG_AGG_UDL_PUT_RESULT_END 40031)
 set(LOG_TAG_AGG_UDL_END 40100)
 
 
-add_library(aggregate_generate_udl SHARED 
-            ${CMAKE_CURRENT_SOURCE_DIR}/aggregate_generate_udl.cpp 
+add_library(aggregate_udl SHARED 
+            ${CMAKE_CURRENT_SOURCE_DIR}/aggregate_udl.cpp 
             ${CMAKE_CURRENT_SOURCE_DIR}/serialize_utils.cpp 
             ${CMAKE_CURRENT_SOURCE_DIR}/api_utils.cpp)
-target_link_libraries(aggregate_generate_udl PRIVATE derecho::cascade)
+target_link_libraries(aggregate_udl PRIVATE derecho::cascade)
 
-target_compile_definitions(aggregate_generate_udl PRIVATE
+target_compile_definitions(aggregate_udl PRIVATE
     LOG_TAG_AGG_UDL_END=${LOG_TAG_AGG_UDL_END}
     LOG_TAG_AGG_UDL_START=${LOG_TAG_AGG_UDL_START}
     LOG_TAG_AGG_UDL_FINISHED_DESERIALIZE=${LOG_TAG_AGG_UDL_FINISHED_DESERIALIZE}
