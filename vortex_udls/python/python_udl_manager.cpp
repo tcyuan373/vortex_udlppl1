@@ -754,9 +754,10 @@ private:
             return nullptr;
         }
 
-        if (!PyArray_Check(value)) {
+        /*** NOTE: different from main repo, need value to be a byte object instead of numpy array object ***/
+        if (!PyBytes_Check(value)) {
             PyErr_SetString(PyExc_AssertionError,
-                    "The second argument, value, is NOT a NumPy array!");
+                    "The second argument, value, is NOT a Byte object!");
             return nullptr;
         }
         // Change the emit type to byte object for customizable serialization schemes
