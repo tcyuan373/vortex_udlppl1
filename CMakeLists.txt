@@ -64,6 +64,8 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/perf_data
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/setup
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
     # Create symlinks for the build index executables
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/build_hnsw_index
         ${CMAKE_CURRENT_BINARY_DIR}/perf_data/build_hnsw_index
@@ -135,6 +137,12 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/setup
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/pipeline_client
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/run_benchmark
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
