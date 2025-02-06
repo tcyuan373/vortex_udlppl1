@@ -13,3 +13,19 @@ build-*
 benchmark/perf_data/hnsw_index/
 # ignore build_hnsw_index executable
 benchmark/perf_data/build_hnsw_index
+
+# ignore py cache
+*__pycache__*
+
+# ignore indeces
+*/indexes/*
+
+#ignore model checkpoints
+*.pt
+
+# ignore data input for pipeline1
+*.parquet
+*.jpg
+*.arrow
+*inat/*
+*google-landmark/*
