@@ -30,8 +30,8 @@ def serialize_string_list(string_list):
 
 if __name__ == "__main__":
     capi = ServiceClientAPI()
-    key = "/print/1"
-    value = ["hello", "world"]
+    key = "/stepA/1"
+    value = ["Hello world!", "GOJI is my puppy."]
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     subgroup_index = 0
     shard_index = 0
