@@ -2,9 +2,19 @@
 *.tar
 *.tar.*
 *.zip
-gist/
-miniset/
-hotpot15/
+
+# Ignore dataset for vector database
+**/gist/
+**/miniset/
+**/hotpot15/
+
+# Ignore VS Code settings and extensions
+.vscode/
+*.code-workspace
+
+# Ignore VS Code debugging and testing files
+.vscode-test/
+.vscode-oss-dev/
 
 # build folder
 build-*
