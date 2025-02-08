@@ -3,7 +3,7 @@
 ## Dataset
 
 ### 1. Download the dataset
-Download the gist dataset could simply be done via running the download script we provided
+Download the gist dataset could simply be done via running the download script we provided, under the directory /data/perf_data
 
 ```./download_gist.sh```
 
@@ -18,7 +18,9 @@ To use FAISS KNN clustering algorithm, you can simple run
 ``` python format_gist.py --embeddings_loc /path/to/save/embeddings --ncentroids 5 --niter 20```
 
 #### 2.2 Use balanced KNN clustering
-To get balanced knn clustering datasets, first needs to compile and build the gp-ann repository. It could be built either via cmake in that directory (Note make sure to build the executables in folder named ```release_l2```) or the python file 
+To get balanced knn clustering datasets, first needs to compile and build the gp-ann repository. (git submodule update --init --recursive
+)
+It could be built either via cmake in that directory (Note make sure to build the executables in folder named ```release_l2```) or the python file 
 ``` python build_balanced_gpann.py ```
 
 To run gp-ann to generate balanced clustering, you can run with -b flag
@@ -26,13 +28,13 @@ To run gp-ann to generate balanced clustering, you can run with -b flag
 ``` python format_gist.py -b --embeddings_loc /path/to/save/embeddings --ncentroids 5 --gp_ann_loc ./gp-ann```
 
 ## Prebuild Indices for HNSW
-Building HNSW indices take a long time. Vortex allows one to load prebuilt indices. The source code is under the `benchmark/hnsw_index/` directory
+Building HNSW indices take a long time. Vortex allows one to load prebuilt indices. The source code is under the `data/hnsw/` directory
 
 **Building Indicies**
 
-1. Locate the dataset folder under `benchmark/perf_data`. The dataset folder should container a `centroids.pkl` file and multiple `cluster_*.pkl` files.
+1. Locate the dataset folder under `perf_data/[dataset_name]`. The dataset folder should container a `centroids.pkl` file and multiple `cluster_*.pkl` files.
 2. If those two files do not exist as in the case of the gist dataset, run `format_gist.py`
-3. The built executable for hnsw_index is at `{build_directory}/perf_data/build_hnsw_index`. It takes dataset directory via arguments `./build_hnsw_index {embedding_dir} {index_dir to store the prebuild indecies} -m {hnsw_m} -e {ef_construction}`. After cd into `{build_directory}/perf_data/` directory, for exmample, if the dataset is called miniset, then the build command will look like `./build_hnsw_index miniset hnsw_index/miniset -m 100 200 -e 200 500`
+3. The built executable for hnsw_index is at `{build_directory}/data/build_hnsw_index`. It takes dataset directory via arguments `./build_hnsw_index {embedding_dir} {index_dir to store the prebuild indecies} -m {hnsw_m} -e {ef_construction}`. After cd into `{build_directory}/data/` directory, for exmample, if the dataset is called miniset, then the build command will look like `./build_hnsw_index perf_data/miniset perf_data/hnsw_index/miniset -m 100 200 -e 200 500`
 
 
 **Loading Indicies**

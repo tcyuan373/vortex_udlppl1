@@ -4,9 +4,7 @@ import argparse
 
 def main():
      parser = argparse.ArgumentParser(description='Run Cluster Partition command with custom directories.')
-     parser.add_argument('--embeddings_loc', type=str, default='./gist', help='Directory to save embeddings and related files(default: ./gist)')
-     parser.add_argument('--ncentroids', type=int, default=3, help='Number of centroids for KMeans clustering(default: 3)')
-
+     parser.add_argument('--embeddings_loc', type=str, default='./perf_data/gist', help='Directory to save embeddings and related files(default: ./gist)')     parser.add_argument('--ncentroids', type=int, default=3, help='Number of centroids for KMeans clustering(default: 3)')
      parser.add_argument('-b', action='store_true', help='Enable the b flag')
      # gp_ann arguments
      parser.add_argument('--gp_ann_loc', type=str, default="./gp-ann" , help='Directory containing the compiled gp_ann code')
