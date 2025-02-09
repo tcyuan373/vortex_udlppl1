@@ -18,11 +18,15 @@ if __name__ == "__main__":
     shard_index     = 0
     
     
-    question_ids = [0, 1]
+    num_queries = 2
+    dummy_q_embeds = torch.randn(num_queries, 320, 128).tolist()
+    query_instructions = [f"instruction {i}" for i in range(num_queries)]
+    query_texts = [f"{query_instructions[i]} : query {i}" for i in range(num_queries)]
+    queries = {i: query_texts[i] for i in range(num_queries)}
+
     dummy_dict = {
-        'question_id': question_ids,
-        'question': ["test sentence test sentece, this this, 100", "GOJI", "I love puppies"],
-        'embedding': [torch.randn(320, 128).tolist() for i in range(len(question_ids))]
+        'queries': queries,
+        'Qembeddings': dummy_q_embeds,
     }
     json_string = json.dumps(dummy_dict)
     byte_data = json_string.encode('utf-8')

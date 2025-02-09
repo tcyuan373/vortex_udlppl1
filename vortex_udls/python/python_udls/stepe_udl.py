@@ -8,6 +8,8 @@ import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+
 import torch
 from torch import Tensor, nn
 from flmr import (
@@ -18,7 +20,8 @@ from flmr import (
     FLMRTextModel,
     search_custom_collection, create_searcher
 )
-
+import threading
+import functools
 
 
 class StepEUDL(UserDefinedLogic):
@@ -34,9 +37,9 @@ class StepEUDL(UserDefinedLogic):
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
 
         self.searcher = None
-        self.index_root_path='./perf_data/pipeline1/index/',
-        self.index_experiment_name='test_experiment',
-        self.index_name='test_index',
+        self.index_root_path        = './perf_data/pipeline1/index/'
+        self.index_experiment_name  = 'test_experiment'
+        self.index_name             = 'test_index'
         
     def load_searcher_gpu(self):
         self.searcher = create_searcher(
@@ -52,25 +55,22 @@ class StepEUDL(UserDefinedLogic):
         bytes_obj           = blob.tobytes()
         json_str_decoded    = bytes_obj.decode('utf-8')
         cluster_result      = json.loads(json_str_decoded)
-        query_ids           = cluster_result['question_id']
-        query_texts         = cluster_result['question']
-        query_embeds        = cluster_result['embedding']
+        queries             = cluster_result['queries']
+        query_embeds        = cluster_result['Qembeddings']
         
-        
-        custom_quries = {
-            question_id: question for question_id, question in zip(query_ids, query_texts)
-        }
-        
-        if self.searcher == None:
+            
+        if self.searcher == None and threading.current_thread() is threading.main_thread():
             self.load_searcher_gpu()
             
-        ranking = search_custom_collection(
-            searcher=self.searcher,
-            queries=custom_quries,
-            query_embeddings=torch.Tensor(query_embeds),
-            num_document_to_retrieve=2, # how many documents to retrieve for each query
-            centroid_search_batch_size=1,
-        )
+        if threading.current_thread() is threading.main_thread():
+            print('inside main thread, calling search func')
+            ranking = search_custom_collection(
+                searcher=self.searcher,
+                queries=queries,
+                query_embeddings=torch.Tensor(query_embeds),
+                num_document_to_retrieve=1, # how many documents to retrieve for each query
+                centroid_search_batch_size=1,
+            )
         
         print('==========Finished Searching==========')
         print(f'Got a ranking dictionary: {ranking.todict()}') 
