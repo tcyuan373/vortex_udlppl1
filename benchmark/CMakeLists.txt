@@ -17,7 +17,7 @@ target_compile_definitions(run_benchmark PRIVATE
 add_custom_target(benchmark_post_build ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/setup
         ${CMAKE_CURRENT_BINARY_DIR}/setup
-    # COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/pipeline_client
-    #     ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/pipeline_client
 )
 add_dependencies(benchmark_post_build run_benchmark)
