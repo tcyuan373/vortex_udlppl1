@@ -117,6 +117,7 @@ class StepAUDL(UserDefinedLogic):
         print(f'input ids of shape: \t\t {text_embeddings.shape}')
         print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
         result = {}
+        result['queries'] = string_list
         result['input_ids'] = input_ids.tolist()
         result['text_embeddings'] = text_embeddings.tolist()
         result['text_encoder_hidden_states'] = text_encoder_hidden_states.tolist()

@@ -17,6 +17,7 @@ from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokeni
 
 class IntermediateResult:
     def __init__(self):
+        self._queries           = None
         self._input_ids         = None
         self._text_embeddings   = None
         self._text_encoder_hidden_states = None
@@ -24,7 +25,8 @@ class IntermediateResult:
         self._transformer_mapping_input_feature = None
         
     def collected_all(self):
-        has_all = self._input_ids != None and \
+        has_all = self._queries != None and \
+            self._input_ids != None and \
             self._text_embeddings != None and \
             self._text_encoder_hidden_states != None and \
             self._vision_embeddings != None and\
@@ -44,6 +46,7 @@ class StepDUDL(UserDefinedLogic):
         super(StepDUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        self.capi = ServiceClientAPI()
         # modeling configs
         self.flmr_config = None
         self.skiplist = []
@@ -222,6 +225,7 @@ class StepDUDL(UserDefinedLogic):
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
         if step_A_idx != -1:
+            self.collected_intermediate_results[batch_id]._queries = blob_data['queries']
             self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(blob_data["input_ids"])
             self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeddings'])
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
@@ -245,10 +249,22 @@ class StepDUDL(UserDefinedLogic):
         
         print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
         
+        
+        
         # garbage cleaning via emit and del
         # self.collected_intermediate_results.erase(batch_id)
-            
+        result = {}
+        result['queries'] = self.collected_intermediate_results[batch_id]._queries
+        result['query_embeddings'] = batch_query_embeddings.tolist()
+        res_json_str = json.dumps(result)
+        res_json_byte = res_json_str.encode('utf-8')
+        # capi.put("/stepD/stepA_1", res_json_byte)
+        subgroup_type = "VolatileCascadeStoreWithStringKey"
+        subgroup_index = 0
+        shard_index = 0
         
+        self.capi.put("/stepE/stepD_1", res_json_byte, subgroup_type=subgroup_type,
+                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
         
     def __del__(self):
         '''
