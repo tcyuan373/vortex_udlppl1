@@ -218,6 +218,8 @@ class StepDUDL(UserDefinedLogic):
         step_A_idx = key.find("stepA") 
         step_B_idx = key.find("stepB")
         
+        print(f'Step D UDL got key: {key}')
+        
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
 
@@ -248,11 +250,10 @@ class StepDUDL(UserDefinedLogic):
                                         )
         
         print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
-        
-        
-        
-        # garbage cleaning via emit and del
+
+
         # self.collected_intermediate_results.erase(batch_id)
+        
         result = {}
         result['queries'] = self.collected_intermediate_results[batch_id]._queries
         result['query_embeddings'] = batch_query_embeddings.tolist()
@@ -263,8 +264,12 @@ class StepDUDL(UserDefinedLogic):
         subgroup_index = 0
         shard_index = 0
         
-        self.capi.put("/stepE/stepD_1", res_json_byte, subgroup_type=subgroup_type,
+        self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+        
+        
+        # garbage cleaning via emit and del
+        del self.collected_intermediate_results[batch_id]
         
     def __del__(self):
         '''

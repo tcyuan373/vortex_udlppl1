@@ -96,6 +96,7 @@ class StepAUDL(UserDefinedLogic):
         '''
         The off-critical data path handler
         '''
+        key = kwargs['key']
         blob = kwargs["blob"]
         string_list = deserialize_string_list(blob.tobytes())
         print(f"I recieved kwargs: {string_list}")
@@ -127,8 +128,14 @@ class StepAUDL(UserDefinedLogic):
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         shard_index = 0
+        prefix = "/stepD/stepA_"
         
-        self.capi.put("/stepD/stepA_1", res_json_byte, subgroup_type=subgroup_type,
+        # indices = [i for i, char in enumerate(key) if char == "/"]
+        # key_id = key[int(indices[-1]):]
+        key_id = key[int(key.find('_'))+1:]
+        new_key =  prefix + key_id
+        print(f"GOT new key for step A: {new_key}")
+        self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
 
     def __del__(self):

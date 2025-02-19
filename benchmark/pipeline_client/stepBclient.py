@@ -26,8 +26,9 @@ def process_img_2_nparray(img_root, image_processor):
 
 
 if __name__ == "__main__":
+    
     capi            = ServiceClientAPI()
-    key             = "/stepB/1"
+    prefix          = "/stepB/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
     shard_index     = 0
@@ -38,5 +39,7 @@ if __name__ == "__main__":
 
     print(f"got ndarray of size {sys.getsizeof(processed_img_nparray)}")
     
-    res = capi.put(key, processed_img_nparray, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+    for i in range(10):
+        key = prefix + f'_{i}'
+        res = capi.put(key, processed_img_nparray, subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)

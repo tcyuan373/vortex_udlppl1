@@ -27,17 +27,20 @@ def serialize_string_list(string_list):
 
 
 
+    
 
 if __name__ == "__main__":
     capi = ServiceClientAPI()
-    key = "/stepA/1"
+    prefix = "/stepA/"
     value = ["GOJI is my puppy."]
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     subgroup_index = 0
     shard_index = 0
 
-    res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+    for i in range(10):
+        key = prefix + f"_{i}"
+        res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
 
 
 

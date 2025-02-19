@@ -68,7 +68,7 @@ class StepEUDL(UserDefinedLogic):
             searcher=self.searcher,
             queries=queries,
             query_embeddings=torch.Tensor(query_embeddings),
-            num_document_to_retrieve=1, # how many documents to retrieve for each query
+            num_document_to_retrieve=3, # how many documents to retrieve for each query
             centroid_search_batch_size=bsize,
         )
         
@@ -107,10 +107,11 @@ class StepEUDL(UserDefinedLogic):
                                       bsize)
         
         print('==========Finished Searching==========')
-        print(f'Got a ranking dictionary: {ranking}')
+        print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
+        print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
         
         # erase the batch id dict{} 
-        
+        del self.collected_intermediate_results[batch_id]
         
     def __del__(self):
         '''

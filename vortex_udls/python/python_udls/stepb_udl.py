@@ -82,6 +82,7 @@ class StepBUDL(UserDefinedLogic):
         '''
         The off-critical data path handler
         '''
+        key = kwargs["key"]
         blob = kwargs["blob"]
         # list_of_images = deserialize_string_list(blob.tobytes())
         # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
@@ -126,12 +127,19 @@ class StepBUDL(UserDefinedLogic):
         res_json_str = json.dumps(result)
         res_json_byte = res_json_str.encode('utf-8')
         
+        
+        prefix = "/stepD/stepB_"
+        
+        # indices = [i for i, char in enumerate(key) if char == "/"]
+        # key_id = key[int(indices[-1]):]
+        key_id = key[int(key.find('_'))+1:]
+        new_key = prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         shard_index = 0
         
-        print(f"got json byte object of size: {sys.getsizeof(res_json_byte)}")
-        self.capi.put("/stepD/stepB_1", res_json_byte, subgroup_type=subgroup_type,
+        print(f"GOT new key for step B: {new_key}")
+        self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)
         
         
