@@ -102,6 +102,7 @@ if __name__ == "__main__":
     shard_index     = 0
     
     data = {}
+    # specifying root directories and preparing ds, passages, image pixel values
     img_root        = './perf_data/pipeline1/data/images'
     image_processor = AutoImageProcessor.from_pretrained('openai/clip-vit-large-patch14', use_fast=True)
     processed_img_nparray = process_img_2_nparray(img_root, image_processor)

@@ -55,18 +55,15 @@ class StepAUDL(UserDefinedLogic):
         self.context_tokenizer          = None   
         self.query_text_encoder         = None 
         self.query_text_encoder_linear  = None
-        
+        self.device                     = 'cpu'
         self.skiplist = []
         
     def load_model_cpu(self):
-        print('begin loading to cpu')
         self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
-        print('get config!')
         self.query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(
                 self.checkpoint_path, 
                 text_config=self.flmr_config.text_config, 
                 subfolder="query_tokenizer")
-        print('init tokenizer')
         if self.flmr_config.mask_instruction_token is not None:
             self.mask_instruction = True
             # obtain the token id of the instruction token
@@ -75,12 +72,9 @@ class StepAUDL(UserDefinedLogic):
             )[0]
         else:
             self.mask_instruction = False
-        print('finished checking instructions')    
         
         self.query_text_encoder = FLMRTextModel(self.flmr_config.text_config)
-        print('query text encoder init')
         self.query_text_encoder_linear = nn.Linear(self.flmr_config.text_config.hidden_size, self.flmr_config.dim, bias=False)
-        print('query text linear init')
         
         try:
             self.query_text_encoder.load_state_dict(torch.load(self.local_encoder_path, weights_only=True))
@@ -89,8 +83,9 @@ class StepAUDL(UserDefinedLogic):
             print(f'Failed to load models checkpoint!!! \n Please check {self.local_encoder_path} or {self.local_projection_path}')
 
     def load_model_gpu(self):
-        self.query_text_encoder_linear.to('cuda')
-        self.query_text_encoder.to('cuda')
+        self.device = 'cuda'
+        self.query_text_encoder_linear.to(self.device)
+        self.query_text_encoder.to(self.device)
 
     def ocdpo_handler(self,**kwargs):
         '''
@@ -98,18 +93,18 @@ class StepAUDL(UserDefinedLogic):
         '''
         key = kwargs['key']
         blob = kwargs["blob"]
-        string_list = deserialize_string_list(blob.tobytes())
-        print(f"I recieved kwargs: {string_list}")
-        if self.query_text_encoder_linear == None:
-            print('==========start loading model cpu==========')
-            self.load_model_cpu()
-            print('==========start loading model gpu==========')
-            self.load_model_gpu()
-        print('==========begin step A forward==========')
-        encoded_inputs      = self.query_tokenizer(string_list)
-        input_ids           = encoded_inputs['input_ids'].to(self.query_text_encoder.device)
-        attention_mask      = encoded_inputs['attention_mask'].to(self.query_text_encoder.device)
+        blob_bytes = blob.tobytes()
+        res_json_str = blob_bytes.decode('utf-8')
+        encoded_inputs = json.loads(res_json_str)
         
+        print('===========Step A start loading model==========')
+        if self.query_text_encoder_linear == None:
+            self.load_model_cpu()
+            self.load_model_gpu()
+        # encoded_inputs      = self.query_tokenizer(string_list)
+        input_ids           = torch.LongTensor(encoded_inputs['input_ids']).to(self.device)
+        attention_mask      = torch.Tensor(encoded_inputs['attention_mask']).to(self.device)
+        print(f"STEP A Got input ids of shape: {input_ids.shape} | attn_mask of shape: {attention_mask.shape}")
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
         text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)
@@ -118,7 +113,8 @@ class StepAUDL(UserDefinedLogic):
         print(f'input ids of shape: \t\t {text_embeddings.shape}')
         print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
         result = {}
-        result['queries'] = string_list
+        result['queries'] = encoded_inputs["text_sequence"]
+        result['question_id'] = encoded_inputs["question_id"]
         result['input_ids'] = input_ids.tolist()
         result['text_embeddings'] = text_embeddings.tolist()
         result['text_encoder_hidden_states'] = text_encoder_hidden_states.tolist()
@@ -134,7 +130,6 @@ class StepAUDL(UserDefinedLogic):
         # key_id = key[int(indices[-1]):]
         key_id = key[int(key.find('_'))+1:]
         new_key =  prefix + key_id
-        print(f"GOT new key for step A: {new_key}")
         self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
 

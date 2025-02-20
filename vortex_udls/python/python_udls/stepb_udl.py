@@ -84,24 +84,27 @@ class StepBUDL(UserDefinedLogic):
         '''
         key = kwargs["key"]
         blob = kwargs["blob"]
+        blob_bytes = blob.tobytes()
+        res_json_str = blob_bytes.decode('utf-8')
+        rec_dict = json.loads(res_json_str)
+        
         # list_of_images = deserialize_string_list(blob.tobytes())
         # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
-        reconstructed_np_array = np.frombuffer(blob, dtype=np.float32).reshape(-1, 1, 3, 224, 224)
-        input_tensor = torch.Tensor(reconstructed_np_array)
-        print(f"got input tensor of shape: {reconstructed_np_array.shape}")
+        # reconstructed_np_array = np.frombuffer(blob, dtype=np.float32).reshape(-1, 1, 3, 224, 224)
+        # input_tensor = torch.Tensor(reconstructed_np_array)
+        
+        print('==========Step B+C start loading model==========')
+
         if self.query_vision_projection == None:
-            print('==========start loading model cpu==========')
             self.load_model_cpu()
             self.stepc.load_model_cpu()
-            print('==========start loading model gpu==========')
             self.load_model_gpu()
             self.stepc.load_model_gpu()
             
-        
+        input_tensor = torch.Tensor(rec_dict["pixel_values"]).to(self.device)
+        print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
         batch_size = input_tensor.shape[0]
         # Forward the vision encoder
-        print('==========begin step B forward==========')
-        input_tensor = input_tensor.to(self.device)
         if len(input_tensor.shape) == 5:
             # Multiple ROIs are provided
             # merge the first two dimensions
@@ -138,7 +141,6 @@ class StepBUDL(UserDefinedLogic):
         subgroup_index = 0
         shard_index = 0
         
-        print(f"GOT new key for step B: {new_key}")
         self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)
         

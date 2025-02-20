@@ -47,8 +47,8 @@ class StepEUDL(UserDefinedLogic):
 
         self.searcher = None
         self.index_root_path        = './perf_data/pipeline1/index/'
-        self.index_experiment_name  = 'test_experiment'
-        self.index_name             = 'test_index'
+        self.index_experiment_name  = 'EVQA_test_split/'
+        self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.collected_intermediate_results = {}
         
     def load_searcher_gpu(self):
@@ -84,9 +84,12 @@ class StepEUDL(UserDefinedLogic):
         cluster_result      = json.loads(json_str_decoded)
         queries_texts       = cluster_result['queries']
         query_embeddings    = cluster_result['query_embeddings']
+        question_ids        = cluster_result['question_id']
         bsize               = 32
         
-        queries = {i: queries_texts[i] for i in range(len(queries_texts))}
+        # queries = {question_id[i]: queries_texts[i] for i in range(len(queries_texts))}
+        assert len(queries_texts) == len(question_ids)
+        queries = dict(zip(question_ids, queries_texts))
         
         step_D_idx = key.find('stepD')
         uds_idx = key.find("_")
