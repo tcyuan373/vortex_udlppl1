@@ -38,8 +38,8 @@ class Monolithic_UDL(UserDefinedLogic):
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
     
         self.index_root_path        = './perf_data/pipeline1/index/'
-        self.index_name             = 'test_index'
-        self.index_experiment_name  = 'test_experiment'
+        self.index_name             = 'EVQA_PreFLMR_ViT-L'
+        self.index_experiment_name  = 'EVQA_test_split'
         self.checkpoint_path        = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.image_processor_name   = 'openai/clip-vit-large-patch14'
         self.Ks                     = [1]
@@ -99,10 +99,10 @@ class Monolithic_UDL(UserDefinedLogic):
             self.load_model_gpu()
         
         examples = {}
-        examples["text_sequence"] = raw_input['input_texts']
-        encoding = self.query_tokenizer(examples["text_sequence"])
-        examples["input_ids"] = encoding["input_ids"]
-        examples["attention_mask"] = encoding["attention_mask"]
+        examples["text_sequence"] = raw_input['text_sequence']
+        # encoding = self.query_tokenizer(examples["text_sequence"])
+        examples["input_ids"] = raw_input["input_ids"]
+        examples["attention_mask"] = raw_input["attention_mask"]
         examples["pixel_values"] = torch.Tensor(raw_input["pixel_values"])
         examples["question_id"] = raw_input["question_id"]
         examples["question"] = raw_input['question']

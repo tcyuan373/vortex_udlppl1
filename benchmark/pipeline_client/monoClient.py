@@ -1,12 +1,38 @@
+#!/usr/bin/env python3
 
 import numpy as np
-import os
-import torch
-from derecho.cascade.external_client import ServiceClientAPI
+import os, sys
 import struct
+import torch
+import json
+from collections import defaultdict
+from easydict import EasyDict
+from derecho.cascade.external_client import ServiceClientAPI
 from transformers import AutoImageProcessor
 from PIL import Image
-import sys, json
+from flmr import (
+    FLMRConfig,
+    FLMRQueryEncoderTokenizer,
+)
+from datasets import load_dataset
+
+
+
+
+def process_img_2_nparray(img_root, image_processor):
+    img_paths = [os.path.join(img_root, item) for item in os.listdir(img_root)]
+    list_of_images = []
+    pixel_values = []
+    for img_path in img_paths:
+        image = Image.open(img_path).convert("RGB")
+        list_of_images.append(image)
+   
+    for img in list_of_images:
+        encoded = image_processor(img, return_tensors="pt")
+        pixel_values.append(encoded.pixel_values)
+    pixel_values = torch.stack(pixel_values, dim=0)
+
+    return pixel_values.numpy().tobytes()
 
 
 def serialize_string_list(string_list):
@@ -27,22 +53,6 @@ def serialize_string_list(string_list):
     # Concatenate everything into a byte stream
     serialized_data = header + offset_section + b''.join(encoded_strings)
     return serialized_data
-
-
-def process_img_2_nparray(img_root, image_processor):
-    img_paths = [os.path.join(img_root, item) for item in os.listdir(img_root)]
-    list_of_images = []
-    pixel_values = []
-    for img_path in img_paths:
-        image = Image.open(img_path).convert("RGB")
-        list_of_images.append(image)
-   
-    for img in list_of_images:
-        encoded = image_processor(img, return_tensors="pt")
-        pixel_values.append(encoded.pixel_values)
-    pixel_values = torch.stack(pixel_values, dim=0)
-
-    return pixel_values.tolist()
 
 
 def prepare_inputs(sample):
@@ -67,27 +77,33 @@ def prepare_inputs(sample):
     sample["text_sequence"] = text_sequence
 
     return sample
-
-
+    
+    
 def tokenize_inputs(examples, query_tokenizer, image_processor):
-    encoding = query_tokenizer(examples["text_sequence"])
-    examples["input_ids"] = encoding["input_ids"]
-    examples["attention_mask"] = encoding["attention_mask"]
+        encoding = query_tokenizer(examples["text_sequence"])
+        examples["input_ids"] = encoding["input_ids"]
+        examples["attention_mask"] = encoding["attention_mask"]
 
-    pixel_values = []
-    for img_path in examples["img_path"]:
+        pixel_values = []
+        for img_path in examples["img_path"]:
 
-        if img_path is None:
-            image = Image.new("RGB", (336, 336), color='black')
-        else:
-            image = Image.open(img_path).convert("RGB")
-        
-        encoded = image_processor(image, return_tensors="pt")
-        pixel_values.append(encoded.pixel_values)
+            if img_path is None:
+                image = Image.new("RGB", (336, 336), color='black')
+            else:
+                image = Image.open(img_path).convert("RGB")
+            
+            encoded = image_processor(image, return_tensors="pt")
+            pixel_values.append(encoded.pixel_values)
 
-    pixel_values = torch.stack(pixel_values, dim=0)
-    examples["pixel_values"] = pixel_values
-    return examples
+        pixel_values = torch.stack(pixel_values, dim=0)
+        examples["pixel_values"] = pixel_values
+        return examples
+    
+def add_path_prefix_in_img_path(example, prefix):
+        if example["img_path"] != None:
+            example["img_path"] = os.path.join(prefix, example["img_path"])
+        return example
+    
 
 
 
@@ -100,23 +116,47 @@ if __name__ == "__main__":
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
     shard_index     = 0
+    batch_size = 2
+    num_batches = 5
     
-    data = {}
-    # specifying root directories and preparing ds, passages, image pixel values
-    img_root        = './perf_data/pipeline1/data/images'
-    image_processor = AutoImageProcessor.from_pretrained('openai/clip-vit-large-patch14', use_fast=True)
-    processed_img_nparray = process_img_2_nparray(img_root, image_processor)
+    checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
+    image_processor_name = 'openai/clip-vit-large-patch14'
+    ds_dir = "/mydata/EVQA_datasets/EVQA_data"
+    image_root_dir = "/mydata/EVQA_datasets"
+    use_split = "test"
+    # model configs, tokenziers
+    flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
+    query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,
+                                                                    text_config=flmr_config.text_config,
+                                                                    subfolder="query_tokenizer")
+    image_processor = AutoImageProcessor.from_pretrained(image_processor_name)
     
-    texts = ["Is this plant poisonous?"]
+    ds = load_dataset('parquet', data_files ={  
+                                            'train' : ds_dir + '/train-00000-of-00001.parquet',
+                                            'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
+                                            })[use_split].select([i for i in range(batch_size * num_batches)])
+    # preprocess datasets so that we have 
+    ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
+    ds = ds.map(prepare_inputs)
+    ds = ds.map(
+        tokenize_inputs,
+        fn_kwargs={"query_tokenizer": query_tokenizer, "image_processor": image_processor},
+        batched=True,
+        batch_size=16,
+        num_proc=16,
+    )
     
-    data["input_texts"] = texts
-    data["pixel_values"] = processed_img_nparray
-    data["question_id"] = ["EVQA_0"]
-    data["question"] = ["Is this plant poisonous?"]
+    for i in range(0, len(ds), batch_size):
+        batch = ds[i : i + batch_size]
+        if (i // batch_size) >= num_batches:    
+            print(f"Batch no. {i // batch_size} reached!  Now break")
+            break
+        
     
-    
-    json_str = json.dumps(data)
-    byte_data = json_str.encode('utf-8')
-    
-    res = capi.put(key, byte_data, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)
+        list_of_keys = ["question_id", "text_sequence", "input_ids", "attention_mask", "pixel_values", "question"]
+        data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
+        json_str = json.dumps(data2send_dict)
+        byte_data = json_str.encode('utf-8')
+        
+        res = capi.put(key, byte_data, subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)

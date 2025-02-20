@@ -110,7 +110,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     subgroup_index = 0
     shard_index = 0
-    batch_size = 1
+    batch_size = 2
     num_batches = 5
     
     # directories and str configs
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     
     for i in range(0, len(ds), batch_size):
         batch = ds[i : i + batch_size]
-        if i >= num_batches:    
+        if (i // batch_size) >= num_batches:    
             print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
