@@ -178,7 +178,9 @@ if __name__ == "__main__":
         
         
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
-                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
+                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
+        if not resB:
+            print("STEPB CAPI put failed!!!")
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
