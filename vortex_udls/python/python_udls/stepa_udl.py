@@ -110,10 +110,10 @@ class StepAUDL(UserDefinedLogic):
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
         text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)
-        print('==========finished forward pass==========')
-        print(f'text embedding of shape: \t {text_embeddings.shape}')
-        print(f'input ids of shape: \t\t {text_embeddings.shape}')
-        print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
+        print('==========Step A finished forward pass==========')
+        # print(f'text embedding of shape: \t {text_embeddings.shape}')
+        # print(f'input ids of shape: \t\t {text_embeddings.shape}')
+        # print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
         result = {}
         result['queries'] = encoded_inputs["text_sequence"]
         result['question_id'] = encoded_inputs["question_id"]
@@ -131,9 +131,13 @@ class StepAUDL(UserDefinedLogic):
         # key_id = key[int(indices[-1]):]
         key_id = key[int(key.find('_'))+1:]
         new_key =  prefix + key_id
-        self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1,as_trigger=True)
-
+        res = self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
+                subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1, trigger=True)
+        if not res:
+            print("CAPI put failed!!!")
+        
+        
+        
     def __del__(self):
         '''
         Destructor

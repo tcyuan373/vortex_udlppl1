@@ -18,7 +18,7 @@ from datasets import load_dataset
 
 
 STEPA_SHARD_INDEX = 0
-STEPB_SHARD_INDEX = 3
+STEPB_SHARD_INDEX = 1
 STEPA_SUBGROUP_INDEX = 0
 STEPB_SUBGROUP_INDEX = 0
 
@@ -116,8 +116,8 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     
-    batch_size = 2
-    num_batches = 5
+    batch_size = 1
+    num_batches = 2
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -165,8 +165,8 @@ if __name__ == "__main__":
         stepa_json_str = json.dumps(stepa_data2send_dict)
         stepa_byte_data = stepa_json_str.encode('utf-8')
         
-        # resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
-        #             subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1,as_trigger=True)
+        resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
+                    subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, trigger=True)
     
         # print(f"Check for pixel_values shape: {torch.Tensor(batch['pixel_values']).shape}")
         stepb_data2send_keys = ["pixel_values"]
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         
         
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
-                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, as_trigger=True)
+                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,

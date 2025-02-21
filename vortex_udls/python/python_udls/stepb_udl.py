@@ -121,12 +121,9 @@ class StepBUDL(UserDefinedLogic):
     
         vision_second_last_layer_hidden_states = vision_encoder_outputs.hidden_states[-2][:, 1:]
         
-        print('==========Step B Finished ==========')
-        print(f'vision_embeddings has shape {vision_embeddings.shape} | vision hidden states has shape{vision_second_last_layer_hidden_states.shape}')
-        
+        print('==========Step B Finished ==========')        
         transformer_mapping_input_feature = self.stepc.stepC_output(vision_second_last_layer_hidden_states)
-        print('==========Step C Finished==========')
-        print(f'Transformer_mapping_input_features has shape: {transformer_mapping_input_feature.shape}')
+        print('==========Step C Finished ==========')
         result = {}
         result['vision_embeddings'] = vision_embeddings.tolist()
         result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
@@ -143,10 +140,11 @@ class StepBUDL(UserDefinedLogic):
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         
-        self.capi.put(new_key,res_json_byte,subgroup_type=subgroup_type,
+        res = self.capi.put(new_key,res_json_byte,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
-                      message_id=1,as_trigger=True)
-        
+                      message_id=1, trigger=True)
+        if not res:
+            print("CAPI put failed!!!")
         
         
     def __del__(self):
