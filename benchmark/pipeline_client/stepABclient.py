@@ -168,19 +168,16 @@ if __name__ == "__main__":
         resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
     
-        # print(f"Check for pixel_values shape: {torch.Tensor(batch['pixel_values']).shape}")
+
         stepb_data2send_keys = ["pixel_values"]
         stepb_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) else batch[k] for k in stepb_data2send_keys if k in batch}
         stepb_key = stepb_prefix + f"_{i}"
         stepb_json_str = json.dumps(stepb_data2send_dict)
         stepb_byte_data = stepb_json_str.encode('utf-8')
         
-        
-        
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
-        if not resB:
-            print("STEPB CAPI put failed!!!")
+
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
