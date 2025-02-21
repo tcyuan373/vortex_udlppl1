@@ -267,7 +267,6 @@ class StepDUDL(UserDefinedLogic):
         res_json_byte = res_json_str.encode('utf-8')
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
-        shard_index = 0
         
         res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, trigger=True)

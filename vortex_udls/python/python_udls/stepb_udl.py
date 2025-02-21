@@ -124,27 +124,32 @@ class StepBUDL(UserDefinedLogic):
         print('==========Step B Finished ==========')        
         transformer_mapping_input_feature = self.stepc.stepC_output(vision_second_last_layer_hidden_states)
         print('==========Step C Finished ==========')
-        result = {}
-        result['vision_embeddings'] = vision_embeddings.tolist()
-        result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
-        res_json_str = json.dumps(result)
-        res_json_byte = res_json_str.encode('utf-8')
+        ve_result = {}
+        hs_result = {}
+        ve_result['vision_embeddings'] = vision_embeddings.tolist()
+        hs_result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
+        veres_json_str = json.dumps(ve_result)
+        veres_json_byte = veres_json_str.encode('utf-8')
+        hsres_json_str = json.dumps(hs_result)
+        hsres_json_byte = hsres_json_str.encode('utf-8')
         
-        
-        prefix = "/stepD/stepB_"
-        
+        ve_prefix = "/stepD/stepBve_"
+        hs_prefix = "/stepD/stepBhs_"
         # indices = [i for i, char in enumerate(key) if char == "/"]
         # key_id = key[int(indices[-1]):]
         key_id = key[int(key.find('_'))+1:]
-        new_key = prefix + key_id
+        ve_key = ve_prefix + key_id
+        hs_key = hs_prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         
-        res = self.capi.put(new_key,res_json_byte,subgroup_type=subgroup_type,
+        resve = self.capi.put(ve_key,veres_json_byte,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
                       message_id=1, as_trigger=True, blocking=False)
-        if not res:
-            print("CAPI put failed!!!")
+        
+        reshs = self.capi.put(hs_key,hsres_json_byte,subgroup_type=subgroup_type,
+                      subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
+                      message_id=1, as_trigger=True, blocking=False)
         
         
     def __del__(self):
