@@ -203,8 +203,8 @@ class StepDUDL(UserDefinedLogic):
             # (input_ids                              # step A      B * seq_len
             # text_embeddings                         # step A      B * 32 * 128
             # text_encoder_hidden_states              # step A      B * 32 * 768
-            # vision_embeddings                       # step B      B * 256 * 1024
-            # transformer_mapping_input_features)     # step B (used to be C, now merged) B * 
+            # vision_embeddings                       # step B      B * 32 * 128
+            # transformer_mapping_input_features)     # step B (used to be C, now merged) B * 256 * 768
 
         
         # now we have the input formalized, proceed with the model serving
@@ -234,11 +234,11 @@ class StepDUDL(UserDefinedLogic):
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             
         elif step_Bve_idx != -1:
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 128)
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 32, 128)
             self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(reconstructed_np)
             
         elif step_Bhs_idx != -1:
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 1024)
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 768)
             self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(reconstructed_np)
             
         if not self.collected_intermediate_results[batch_id].collected_all():
