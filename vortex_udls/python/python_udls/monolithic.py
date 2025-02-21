@@ -37,7 +37,7 @@ class Monolithic_UDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
     
-        self.index_root_path        = './perf_data/pipeline1/index/'
+        self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.index_experiment_name  = 'EVQA_test_split'
         self.checkpoint_path        = 'LinWeizheDragon/PreFLMR_ViT-L'

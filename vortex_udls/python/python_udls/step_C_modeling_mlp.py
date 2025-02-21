@@ -7,7 +7,7 @@ from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokeni
 class StepC:
     def __init__(self):
         self.checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_model_path = "perf_data/pipeline1/models/models_step_C_transformer_mapping_input_linear.pt"
+        self.local_model_path = "/mydata/EVQA_datasets/models/models_step_C_transformer_mapping_input_linear.pt"
         self.flmr_config = None
         
         
