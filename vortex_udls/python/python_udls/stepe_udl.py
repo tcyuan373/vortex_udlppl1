@@ -112,13 +112,13 @@ class StepEUDL(UserDefinedLogic):
         qembeds_save_dir = qembed_dir + "Qembeds.pt"
         queries_save_dir = qembed_dir + "queries.pt"
         print("==========Begin saving Qembeds and Queries=========")
-        if not os.exists(qembed_dir):
+        if not os.path.exists(qembed_dir):
             os.mkdir(qembed_dir)
-        if os.exists(qembeds_save_dir):
+        if os.path.exists(qembeds_save_dir):
             qembeds_to_save = torch.load(qembeds_save_dir)
             qembeds_to_save = torch.stack(qembeds_to_save, query_embeddings, dim=0)
             torch.save(qembeds_to_save, qembeds_save_dir)
-        if os.exists(queries_save_dir):
+        if os.path.exists(queries_save_dir):
             queries_to_save = torch.load(queries_save_dir)
             queries_to_save = {**queries_to_save, **queries}
             torch.save(queries_to_save, queries_save_dir)
