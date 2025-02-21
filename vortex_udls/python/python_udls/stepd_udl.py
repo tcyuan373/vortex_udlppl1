@@ -59,8 +59,8 @@ class StepDUDL(UserDefinedLogic):
         self.late_interaction_embedding_size = 128
         self.checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.transformer_mapping_config_base = 'bert-base-uncased'
-        self.local_tf_mapping_path = 'perf_data/pipeline1/models/models_step_D_transformer_mapping.pt'
-        self.local_tf_mapping_output_path = 'perf_data/pipeline1/models/models_step_D_transformer_mapping_output.pt'
+        self.local_tf_mapping_path = '/mydata/EVQA_datasets/models/models_step_D_transformer_mapping.pt'
+        self.local_tf_mapping_output_path = '/mydata/EVQA_datasets/models/models_step_D_transformer_mapping_output.pt'
         self.transformer_mapping_network = None
         self.transformer_mapping_output_linear = None
         

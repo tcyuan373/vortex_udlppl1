@@ -48,8 +48,8 @@ class StepAUDL(UserDefinedLogic):
         self.capi = ServiceClientAPI()
         
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_encoder_path         = 'perf_data/pipeline1/models/models_step_A_query_text_encoder.pt'
-        self.local_projection_path      = 'perf_data/pipeline1/models/models_step_A_query_text_linear.pt'
+        self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_A_query_text_encoder.pt'
+        self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_A_query_text_linear.pt'
         self.flmr_config                = None
         self.query_tokenizer            = None
         self.context_tokenizer          = None   

@@ -109,16 +109,16 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     subgroup_index = 0
-    shard_index = 0
+    shard_index = 1
     batch_size = 2
     num_batches = 5
     
     # directories and str configs
-    checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
-    ds_dir = "/mydata/EVQA_datasets/EVQA_data"
+    checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_root_dir = "/mydata/EVQA_datasets"
     use_split = "test"
+    ds_dir = "/mydata/EVQA_datasets/EVQA_data"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
     query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,

@@ -46,7 +46,7 @@ class StepEUDL(UserDefinedLogic):
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
 
         self.searcher = None
-        self.index_root_path        = './perf_data/pipeline1/index/'
+        self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_experiment_name  = 'EVQA_test_split/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.collected_intermediate_results = {}

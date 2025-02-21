@@ -48,8 +48,8 @@ class StepBUDL(UserDefinedLogic):
         self.capi = ServiceClientAPI()
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_encoder_path         = 'perf_data/pipeline1/models/models_step_B_vision_encoder.pt'
-        self.local_projection_path      = 'perf_data/pipeline1/models/models_step_B_vision_projection.pt'
+        self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_B_vision_encoder.pt'
+        self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_B_vision_projection.pt'
         self.image_processor            = None
         self.flmr_config                = None
 
