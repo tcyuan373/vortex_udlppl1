@@ -51,8 +51,8 @@ class StepEUDL(UserDefinedLogic):
         self.index_experiment_name  = 'EVQA_train_split/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.collected_intermediate_results = {}
-        self.queries2save = {}
-        self.qembeds2save = torch.Tensor([], dtype = torch.float32)
+        # self.queries2save = {}
+        # self.qembeds2save = torch.Tensor([], dtype = torch.float32)
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
