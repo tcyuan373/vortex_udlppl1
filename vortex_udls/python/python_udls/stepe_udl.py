@@ -68,7 +68,7 @@ class StepEUDL(UserDefinedLogic):
             searcher=self.searcher,
             queries=queries,
             query_embeddings=torch.Tensor(query_embeddings),
-            num_document_to_retrieve=[1,3,5], # how many documents to retrieve for each query
+            num_document_to_retrieve=5, # how many documents to retrieve for each query
             centroid_search_batch_size=bsize,
         )
         

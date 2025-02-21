@@ -115,9 +115,8 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    off_set = 55
     batch_size = 1
-    num_batches = 10
+    num_batches = 50
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -136,7 +135,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(999)])
+                                            })[use_split].select(i for i in range(999))
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
