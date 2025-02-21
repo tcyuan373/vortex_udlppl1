@@ -117,7 +117,7 @@ if __name__ == "__main__":
     
     
     batch_size = 1
-    num_batches = 2
+    num_batches = 1
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
