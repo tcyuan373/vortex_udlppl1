@@ -26,7 +26,7 @@ from flmr import (
 from flmr import index_custom_collection
 from flmr import create_searcher, search_custom_collection
 
-
+import time
 
 
 
@@ -117,6 +117,15 @@ class Monolithic_UDL(UserDefinedLogic):
         }
         query_embeddings = self.flmr_model.query(**query_input).late_interaction_output
         query_embeddings = query_embeddings.detach().cpu()
+        
+        qembeds_save_dir = "./Qembeds/Qembeds.pt"
+        if os.exists(qembeds_save_dir):
+            qembeds_to_save = torch.load(qembeds_save_dir, weights_only=True)
+            qembeds_to_save = torch.stack(qembeds_to_save, query_embeddings, dim=0)
+            torch.save(qembeds_to_save, qembeds_save_dir)
+            
+        torch.save(query_embeddings, qembeds_save_dir)
+            
         
         queries = {
             question_id: question for question_id, question in zip(examples["question_id"], examples["question"])

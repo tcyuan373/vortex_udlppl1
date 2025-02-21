@@ -116,8 +116,8 @@ if __name__ == "__main__":
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
     shard_index     = 0
-    batch_size = 2
-    num_batches = 5
+    batch_size = 1
+    num_batches = 100
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(batch_size * num_batches)])
+                                            })[use_split].select([i for i in range()])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
@@ -147,7 +147,8 @@ if __name__ == "__main__":
     )
     
     for i in range(0, len(ds), batch_size):
-        batch = ds[i : i + batch_size]
+        idx = torch.randint(0, 555, (1,)).item()
+        batch = ds[idx : idx + batch_size]
         if (i // batch_size) >= num_batches:    
             print(f"Batch no. {i // batch_size} reached!  Now break")
             break
