@@ -130,8 +130,8 @@ class StepBUDL(UserDefinedLogic):
         # hsres_json_byte = hsres_json_str.encode('utf-8')
         
         
-        ve = vision_embeddings.numpy().tobytes()
-        hs = transformer_mapping_input_feature.numpy().tobytes()
+        ve = vision_embeddings.detach().cpu().numpy().tobytes()
+        hs = transformer_mapping_input_feature.detach().cpu().numpy().tobytes()
         
         
         ve_prefix = "/stepD/stepBve_"
