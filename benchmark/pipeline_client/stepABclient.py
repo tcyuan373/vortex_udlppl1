@@ -15,7 +15,7 @@ from flmr import (
     FLMRQueryEncoderTokenizer,
 )
 from datasets import load_dataset
-
+import time
 
 STEPA_SHARD_INDEX = 0
 STEPB_SHARD_INDEX = 1
@@ -115,15 +115,15 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    
+    off_set = 55
     batch_size = 1
-    num_batches = 1
+    num_batches = 10
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_root_dir = "/mydata/EVQA_datasets"
-    use_split = "test"
+    use_split = "train"
     ds_dir = "/mydata/EVQA_datasets/EVQA_data"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(batch_size * num_batches)])
+                                            })[use_split].select([i for i in range(999)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
@@ -152,7 +152,9 @@ if __name__ == "__main__":
     
     
     for i in range(0, len(ds), batch_size):
-        batch = ds[i : i + batch_size]
+        idx = torch.randint(0, 555, (1,)).item()
+        batch = ds[idx : idx + batch_size]
+        # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
         if (i // batch_size) >= num_batches:    
             print(f"Batch no. {i // batch_size} reached!  Now break")
             break
@@ -178,6 +180,7 @@ if __name__ == "__main__":
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
 
+        # time.sleep(15)
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
