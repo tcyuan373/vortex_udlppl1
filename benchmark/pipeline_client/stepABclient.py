@@ -8,7 +8,7 @@ import json
 from collections import defaultdict
 from easydict import EasyDict
 from derecho.cascade.external_client import ServiceClientAPI
-from derecho.cascade.member_client import TimestampLogger
+from derecho.cascade.external_client import TimestampLogger
 from transformers import AutoImageProcessor
 from PIL import Image
 from flmr import (
