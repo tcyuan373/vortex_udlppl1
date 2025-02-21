@@ -234,11 +234,11 @@ class StepDUDL(UserDefinedLogic):
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             
         elif step_Bve_idx != -1:
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).rehsape(-1, 256, self.flmr_config.dim)
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 128)
             self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(reconstructed_np)
             
         elif step_Bhs_idx != -1:
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).rehsape(-1, 256, 1024)
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 1024)
             self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(reconstructed_np)
             
         if not self.collected_intermediate_results[batch_id].collected_all():
