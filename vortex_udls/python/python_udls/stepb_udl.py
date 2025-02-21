@@ -15,7 +15,7 @@ from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
 
 
-STEPB_NEXT_UDL_SHARD_INDEX = 0
+STEPB_NEXT_UDL_SHARD_INDEX = 2
 
 class FLMRMultiLayerPerceptron(nn.Module):
     """
@@ -46,7 +46,10 @@ class StepBUDL(UserDefinedLogic):
         super(StepBUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
         self.capi = ServiceClientAPI()
+        self.my_id = self.capi.get_my_id()
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        
+        print(f"GOT MY ID AS: {self.my_id}")
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_B_vision_encoder.pt'
         self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_B_vision_projection.pt'
