@@ -4,6 +4,8 @@ from collections import defaultdict
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
+
 import numpy as np
 import torch
 from colbert import Indexer, Searcher
@@ -36,7 +38,9 @@ class Monolithic_UDL(UserDefinedLogic):
         super(Monolithic_UDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
-    
+        self.capi = ServiceClientAPI()
+        self.my_id = self.capi.get_my_id()
+        self.tl = TimestampLogger()
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.index_experiment_name  = 'EVQA_test_split'
@@ -118,13 +122,6 @@ class Monolithic_UDL(UserDefinedLogic):
         query_embeddings = self.flmr_model.query(**query_input).late_interaction_output
         query_embeddings = query_embeddings.detach().cpu()
         
-        qembeds_save_dir = "./Qembeds/Qembeds.pt"
-        if os.exists(qembeds_save_dir):
-            qembeds_to_save = torch.load(qembeds_save_dir, weights_only=True)
-            qembeds_to_save = torch.stack(qembeds_to_save, query_embeddings, dim=0)
-            torch.save(qembeds_to_save, qembeds_save_dir)
-            
-        torch.save(query_embeddings, qembeds_save_dir)
             
         
         queries = {
@@ -135,12 +132,16 @@ class Monolithic_UDL(UserDefinedLogic):
             searcher=self.searcher,
             queries= queries,
             query_embeddings=query_embeddings,
-            num_document_to_retrieve=1, # how many documents to retrieve for each query
+            num_document_to_retrieve=5, # how many documents to retrieve for each query
             centroid_search_batch_size=bsize,
         )
         
         print(f'Got ranking dictionary: {ranking.todict()}')
+        self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
         
+        if int(kwargs["message_id"]) == 99:
+            self.tl.flush(f"node_{self.my_id}_timestamp.dat")
+            print("TL flushed!!!")
         
     def __del__(self):
         '''
