@@ -119,7 +119,7 @@ if __name__ == "__main__":
     subgroup_index  = 0
     shard_index     = 0
     batch_size = 1
-    num_batches = 100
+    num_batches = 50
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -187,4 +187,4 @@ if __name__ == "__main__":
         res = capi.put(prefix + f"_{i}", byte_data, subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=shard_index, message_id=i, trigger=True)
         
-    tl.flush("client_timestamp.dat")
+    tl.flush("mono_client_timestamp.dat")
