@@ -265,15 +265,14 @@ class StepDUDL(UserDefinedLogic):
         result['question_id'] = self.collected_intermediate_results[batch_id]._question_id
         res_json_str = json.dumps(result)
         res_json_byte = res_json_str.encode('utf-8')
-        # capi.put("/stepD/stepA_1", res_json_byte)
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         shard_index = 0
         
         res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1)
-        if not res:
-            print("CAPI put failed!!!")
+                subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
+        # if not res:
+        #     print("CAPI put failed!!!")
         
         # garbage cleaning via emit and del
         del self.collected_intermediate_results[batch_id]
