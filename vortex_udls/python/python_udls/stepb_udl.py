@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-import numpy as np
 import json
-import re
-import struct
-import warnings
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
-import os, sys
 import torch
-from torch import Tensor, nn
-from flmr import FLMRConfig, FLMRVisionModel, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
+from torch import nn
+from flmr import FLMRConfig, FLMRVisionModel
 from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
 
@@ -123,15 +118,21 @@ class StepBUDL(UserDefinedLogic):
         
         print('==========Step B Finished ==========')        
         transformer_mapping_input_feature = self.stepc.stepC_output(vision_second_last_layer_hidden_states)
+        print(f'the shape of hs: {transformer_mapping_input_feature.shape} | and for ve: {vision_embeddings.shape}')
         print('==========Step C Finished ==========')
-        ve_result = {}
-        hs_result = {}
-        ve_result['vision_embeddings'] = vision_embeddings.tolist()
-        hs_result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
-        veres_json_str = json.dumps(ve_result)
-        veres_json_byte = veres_json_str.encode('utf-8')
-        hsres_json_str = json.dumps(hs_result)
-        hsres_json_byte = hsres_json_str.encode('utf-8')
+        # ve_result = {}
+        # hs_result = {}
+        # ve_result['vision_embeddings'] = vision_embeddings.tolist()
+        # hs_result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
+        # veres_json_str = json.dumps(ve_result)
+        # veres_json_byte = veres_json_str.encode('utf-8')
+        # hsres_json_str = json.dumps(hs_result)
+        # hsres_json_byte = hsres_json_str.encode('utf-8')
+        
+        
+        ve = vision_embeddings.numpy().tobytes()
+        hs = transformer_mapping_input_feature.numpy().tobytes()
+        
         
         ve_prefix = "/stepD/stepBve_"
         hs_prefix = "/stepD/stepBhs_"
@@ -143,11 +144,11 @@ class StepBUDL(UserDefinedLogic):
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         
-        resve = self.capi.put(ve_key,veres_json_byte,subgroup_type=subgroup_type,
+        resve = self.capi.put(ve_key,ve,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
                       message_id=1, as_trigger=True, blocking=False)
         
-        reshs = self.capi.put(hs_key,hsres_json_byte,subgroup_type=subgroup_type,
+        reshs = self.capi.put(hs_key,hs,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
                       message_id=1, as_trigger=True, blocking=False)
         

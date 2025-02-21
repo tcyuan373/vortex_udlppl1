@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 import numpy as np
 import json
-import re
-import struct
-import warnings
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
-import os
 import torch
 from torch import Tensor, nn
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
-from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
+from flmr import FLMRConfig, FLMRQueryEncoderTokenizer
 
 
 STEPD_NEXT_UDL_SHARD_INDEX = 3
@@ -214,13 +210,10 @@ class StepDUDL(UserDefinedLogic):
         # now we have the input formalized, proceed with the model serving
         key = kwargs["key"]
         blob = kwargs["blob"]
-        blob_bytes = blob.tobytes()
-
-        res_json_str = blob_bytes.decode('utf-8')
-        blob_data = json.loads(res_json_str)
         
         step_A_idx = key.find("stepA") 
-        step_B_idx = key.find("stepB")
+        step_Bve_idx = key.find("stepBve")
+        step_Bhs_idx = key.find("stepBhs")
         
         print(f'Step D UDL got key: {key}')
         
@@ -231,15 +224,23 @@ class StepDUDL(UserDefinedLogic):
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
         if step_A_idx != -1:
+            blob_bytes = blob.tobytes()
+            res_json_str = blob_bytes.decode('utf-8')
+            blob_data = json.loads(res_json_str)
             self.collected_intermediate_results[batch_id]._question_id = blob_data['question_id']
             self.collected_intermediate_results[batch_id]._queries = blob_data['queries']
             self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(blob_data["input_ids"])
             self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeddings'])
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             
-        elif step_B_idx != -1:
-            self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(blob_data["vision_embeddings"])
-            self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(blob_data['transformer_mapping_input_feature'])
+        elif step_Bve_idx != -1:
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).rehsape(-1, 256, self.flmr_config.dim)
+            self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(reconstructed_np)
+            
+        elif step_Bhs_idx != -1:
+            reconstructed_np = np.frombuffer(blob, dtype=np.float32).rehsape(-1, 256, 1024)
+            self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(reconstructed_np)
+            
         if not self.collected_intermediate_results[batch_id].collected_all():
             return
         
