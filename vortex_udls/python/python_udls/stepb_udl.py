@@ -49,7 +49,6 @@ class StepBUDL(UserDefinedLogic):
         self.my_id = self.capi.get_my_id()
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         
-        print(f"GOT MY ID AS: {self.my_id}")
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_B_vision_encoder.pt'
         self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_B_vision_projection.pt'
@@ -91,6 +90,7 @@ class StepBUDL(UserDefinedLogic):
         res_json_str = blob_bytes.decode('utf-8')
         rec_dict = json.loads(res_json_str)
         
+        print(f"GOT MY ID AS: {self.my_id}")
         # list_of_images = deserialize_string_list(blob.tobytes())
         # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
         # reconstructed_np_array = np.frombuffer(blob, dtype=np.float32).reshape(-1, 1, 3, 224, 224)
