@@ -13,6 +13,8 @@ from torch import Tensor, nn
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
 
 
+STEPA_NEXT_UDL_SHARD_INDEX = 2
+
 def deserialize_string_list(serialized_data):
     """Deserialize a custom binary format into a list of strings."""
     num_elements = struct.unpack("I", serialized_data[:4])[0]  # Read the number of elements
@@ -123,7 +125,6 @@ class StepAUDL(UserDefinedLogic):
         # capi.put("/stepD/stepA_1", res_json_byte)
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
-        shard_index = 0
         prefix = "/stepD/stepA_"
         
         # indices = [i for i, char in enumerate(key) if char == "/"]
@@ -131,7 +132,7 @@ class StepAUDL(UserDefinedLogic):
         key_id = key[int(key.find('_'))+1:]
         new_key =  prefix + key_id
         self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+                subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
 
     def __del__(self):
         '''

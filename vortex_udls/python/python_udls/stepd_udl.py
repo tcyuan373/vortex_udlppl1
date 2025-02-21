@@ -15,6 +15,8 @@ from transformers.models.bert.modeling_bert import BertEncoder
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
 
 
+STEPD_NEXT_UDL_SHARD_INDEX = 3
+
 class IntermediateResult:
     def __init__(self):
         self._question_id       = None
@@ -269,7 +271,7 @@ class StepDUDL(UserDefinedLogic):
         shard_index = 0
         
         self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+                subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1)
         
         
         # garbage cleaning via emit and del

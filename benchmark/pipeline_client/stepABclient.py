@@ -16,6 +16,12 @@ from flmr import (
 )
 from datasets import load_dataset
 
+
+STEPA_SHARD_INDEX = 0
+STEPB_SHARD_INDEX = 1
+STEPA_SUBGROUP_INDEX = 0
+STEPB_SUBGROUP_INDEX = 0
+
 def process_img_2_nparray(img_root, image_processor):
     img_paths = [os.path.join(img_root, item) for item in os.listdir(img_root)]
     list_of_images = []
@@ -108,8 +114,8 @@ if __name__ == "__main__":
     stepa_prefix = "/stepA/"
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
-    subgroup_index = 0
-    shard_index = 1
+    
+    
     batch_size = 2
     num_batches = 5
     
@@ -160,7 +166,7 @@ if __name__ == "__main__":
         stepa_byte_data = stepa_json_str.encode('utf-8')
         
         res = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=1,trigger=True)
+                    subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1,trigger=True)
     
         # print(f"Check for pixel_values shape: {torch.Tensor(batch['pixel_values']).shape}")
         stepb_data2send_keys = ["pixel_values"]
@@ -170,7 +176,7 @@ if __name__ == "__main__":
         stepb_byte_data = stepb_json_str.encode('utf-8')
         
         res = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)
+                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,

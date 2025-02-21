@@ -15,7 +15,7 @@ from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
 
 
-
+STEPB_NEXT_UDL_SHARD_INDEX = 2
 
 class FLMRMultiLayerPerceptron(nn.Module):
     """
@@ -139,10 +139,9 @@ class StepBUDL(UserDefinedLogic):
         new_key = prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
-        shard_index = 0
         
         self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=shard_index, message_id=1, trigger=True)
+                subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX, message_id=1, trigger=True)
         
         
         
