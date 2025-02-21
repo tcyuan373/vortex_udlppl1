@@ -43,7 +43,7 @@ class Monolithic_UDL(UserDefinedLogic):
         self.tl = TimestampLogger()
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
-        self.index_experiment_name  = 'EVQA_test_split'
+        self.index_experiment_name  = 'EVQA_train_split'
         self.checkpoint_path        = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.image_processor_name   = 'openai/clip-vit-large-patch14'
         self.Ks                     = [1]
@@ -139,7 +139,7 @@ class Monolithic_UDL(UserDefinedLogic):
         # print(f'Got ranking dictionary: {ranking.todict()}')
         self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
         
-        if int(kwargs["message_id"]) == 49:
+        if int(kwargs["message_id"]) == 99:
             self.tl.flush(f"mono_node_{self.my_id}_timestamp.dat")
             print("TL flushed!!!")
         

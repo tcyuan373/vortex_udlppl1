@@ -119,13 +119,13 @@ if __name__ == "__main__":
     subgroup_index  = 0
     shard_index     = 0
     batch_size = 1
-    num_batches = 50
+    num_batches = 100
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
     ds_dir = "/mydata/EVQA_datasets/EVQA_data"
     image_root_dir = "/mydata/EVQA_datasets"
-    use_split = "test"
+    use_split = "train"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
     query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range()])
+                                            })[use_split].select([i for i in range(599)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     )
     
     for i in range(0, len(ds), batch_size):
-        idx = torch.randint(0, 555, (1,)).item()
+        idx = torch.randint(0, 500, (1,)).item()
         batch = ds[idx : idx + batch_size]
         if (i // batch_size) >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
@@ -177,9 +177,6 @@ if __name__ == "__main__":
         #             subgroup_index=subgroup_index,shard_index=, message_id=1, trigger=True)
         list_of_keys = ["question_id", "text_sequence", "input_ids", "attention_mask", "pixel_values", "question"]
         data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
-        
-        batch["pixel_values"].numpy()
-        
         
         json_str = json.dumps(data2send_dict)
         byte_data = json_str.encode('utf-8')
