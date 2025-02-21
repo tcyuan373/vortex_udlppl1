@@ -143,7 +143,8 @@ class StepBUDL(UserDefinedLogic):
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 1
         
-        self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX, message_id=1, trigger=True)
+        self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
+                      subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX, message_id=1)
         
         
         
