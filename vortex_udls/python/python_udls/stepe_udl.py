@@ -138,7 +138,7 @@ class StepEUDL(UserDefinedLogic):
         
         # erase the batch id dict{} 
         del self.collected_intermediate_results[batch_id]
-        if batch_id == 50:
+        if batch_id == 49:
             self.tl.flush(f"node{self.my_id}_udls_timestamp.dat")
             print("Time Log Flushed!!!")
         
