@@ -145,7 +145,7 @@ class StepBUDL(UserDefinedLogic):
         
         self.capi.put(new_key,res_json_byte,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
-                      message_id=1,trigger=True)
+                      message_id=1,as_trigger=True)
         
         
         
