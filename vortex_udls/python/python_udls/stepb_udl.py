@@ -15,7 +15,7 @@ from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
 
 
-STEPB_NEXT_UDL_SHARD_INDEX = 3
+STEPB_NEXT_UDL_SHARD_INDEX = 0
 
 class FLMRMultiLayerPerceptron(nn.Module):
     """
