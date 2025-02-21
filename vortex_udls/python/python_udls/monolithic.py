@@ -37,7 +37,7 @@ class Monolithic_UDL(UserDefinedLogic):
     def __init__(self,conf_str):
         super(Monolithic_UDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
@@ -136,7 +136,7 @@ class Monolithic_UDL(UserDefinedLogic):
             centroid_search_batch_size=bsize,
         )
         
-        print(f'Got ranking dictionary: {ranking.todict()}')
+        # print(f'Got ranking dictionary: {ranking.todict()}')
         self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
         
         if int(kwargs["message_id"]) == 99:
