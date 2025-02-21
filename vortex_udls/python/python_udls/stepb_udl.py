@@ -141,7 +141,7 @@ class StepBUDL(UserDefinedLogic):
         key_id = key[int(key.find('_'))+1:]
         new_key = prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
-        subgroup_index = 1
+        subgroup_index = 0
         
         self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX, message_id=1)
