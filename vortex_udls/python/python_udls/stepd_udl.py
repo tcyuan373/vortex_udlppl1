@@ -45,7 +45,7 @@ class StepDUDL(UserDefinedLogic):
         '''
         super(StepDUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         # modeling configs
         self.flmr_config = None
@@ -158,10 +158,10 @@ class StepDUDL(UserDefinedLogic):
                        transformer_mapping_input_features,
                        ):
         if self.transformer_mapping_network == None:
-            print('==========start loading model cpu==========')
+            # print('==========start loading model cpu==========')
             self.load_model_cpu()
             
-            print('==========start loading model gpu==========')
+            # print('==========start loading model gpu==========')
             self.load_model_gpu()
             
         
@@ -215,7 +215,7 @@ class StepDUDL(UserDefinedLogic):
         step_Bve_idx = key.find("stepBve")
         step_Bhs_idx = key.find("stepBhs")
         
-        print(f'Step D UDL got key: {key}')
+        # print(f'Step D UDL got key: {key}')
         
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
@@ -255,7 +255,7 @@ class StepDUDL(UserDefinedLogic):
                                     self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature,
                                         )
         
-        print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
+        # print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
 
 
         # self.collected_intermediate_results.erase(batch_id)

@@ -8,6 +8,8 @@ import warnings
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
+
 import torch
 from torch import Tensor, nn
 from flmr import (
@@ -44,12 +46,16 @@ class StepEUDL(UserDefinedLogic):
         super(StepEUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
-
         self.searcher = None
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_experiment_name  = 'EVQA_train_split/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.collected_intermediate_results = {}
+        self.queries2save = {}
+        self.qembeds2save = torch.Tensor([], dtype = torch.float32)
+        self.capi = ServiceClientAPI()
+        self.my_id = self.capi.get_my_id()
+        self.tl = TimestampLogger()
         
     def load_searcher_gpu(self):
         self.searcher = create_searcher(
@@ -108,29 +114,34 @@ class StepEUDL(UserDefinedLogic):
         ranking = self.process_search(self.collected_intermediate_results[batch_id]._queries, 
                                       self.collected_intermediate_results[batch_id]._query_embeddings,
                                       bsize)
-        qembed_dir = "./Qembeds/"
-        qembeds_save_dir = qembed_dir + "Qembeds.pt"
-        queries_save_dir = qembed_dir + "queries.pt"
-        print("==========Begin saving Qembeds and Queries=========")
-        if not os.path.exists(qembed_dir):
-            os.mkdir(qembed_dir)
-        if os.path.exists(qembeds_save_dir):
-            qembeds_to_save = torch.load(qembeds_save_dir)
-            qembeds_to_save = torch.stack([qembeds_to_save, torch.Tensor(query_embeddings)], dim=0)
-            torch.save(qembeds_to_save, qembeds_save_dir)
-        if os.path.exists(queries_save_dir):
-            queries_to_save = torch.load(queries_save_dir)
-            queries_to_save = {**queries_to_save, **queries}
-            torch.save(queries_to_save, queries_save_dir)
-        torch.save(torch.Tensor(query_embeddings), qembeds_save_dir)
-        torch.save(queries, queries_save_dir)
-        print("==========Finish saving Qembeds and Queries=========")
-        print('==========Finished Searching==========')
-        print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
-        print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
+        # qembed_dir = "./Qembeds/"
+        # qembeds_save_dir = qembed_dir + "Qembeds.pt"
+        # queries_save_dir = qembed_dir + "queries.pt"
+        # print("==========Begin saving Qembeds and Queries=========")
+        # if not os.path.exists(qembed_dir):
+        #     os.mkdir(qembed_dir)
+        # if os.path.exists(qembeds_save_dir):
+        #     qembeds_to_save = torch.load(qembeds_save_dir)
+        #     qembeds_to_save = torch.stack([qembeds_to_save, torch.Tensor(query_embeddings)], dim=0)
+        #     torch.save(qembeds_to_save, qembeds_save_dir)
+        # if os.path.exists(queries_save_dir):
+        #     queries_to_save = torch.load(queries_save_dir)
+        #     queries_to_save = {**queries_to_save, **queries}
+        #     torch.save(queries_to_save, queries_save_dir)
+        # torch.save(torch.Tensor(query_embeddings), qembeds_save_dir)
+        # torch.save(queries, queries_save_dir)
+        # print("==========Finish saving Qembeds and Queries=========")
+        # print('==========Finished Searching==========')
+        # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
+        # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
+        self.tl.log(20000, batch_id, 0, 0)
         
         # erase the batch id dict{} 
         del self.collected_intermediate_results[batch_id]
+        if batch_id == 50:
+            self.tl.flush(f"node{self.my_id}_udls_timestamp.dat")
+            print("Time Log Flushed!!!")
+        
         
     def __del__(self):
         '''

@@ -8,6 +8,7 @@ import json
 from collections import defaultdict
 from easydict import EasyDict
 from derecho.cascade.external_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
 from transformers import AutoImageProcessor
 from PIL import Image
 from flmr import (
@@ -16,6 +17,8 @@ from flmr import (
 )
 from datasets import load_dataset
 import time
+
+
 
 STEPA_SHARD_INDEX = 0
 STEPB_SHARD_INDEX = 1
@@ -110,6 +113,8 @@ def add_path_prefix_in_img_path(example, prefix):
     
 
 if __name__ == "__main__":
+    
+    tl = TimestampLogger()
     capi = ServiceClientAPI()
     stepa_prefix = "/stepA/"
     stepb_prefix = "/stepB/"
@@ -155,7 +160,7 @@ if __name__ == "__main__":
         batch = ds[idx : idx + batch_size]
         # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
         if (i // batch_size) >= num_batches:    
-            print(f"Batch no. {i // batch_size} reached!  Now break")
+            # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
         # print(f"Check for input ids: {torch.LongTensor(batch['input_ids']).shape} | \n attention_mask: {torch.Tensor(batch['attention_mask']).shape}")
@@ -165,10 +170,10 @@ if __name__ == "__main__":
         stepa_key = stepa_prefix + f"_{i}"
         stepa_json_str = json.dumps(stepa_data2send_dict)
         stepa_byte_data = stepa_json_str.encode('utf-8')
-        
+        tl.log(10000 ,i ,0 ,0 )
         resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
-    
+        
 
         stepb_data2send_keys = ["pixel_values"]
         stepb_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) else batch[k] for k in stepb_data2send_keys if k in batch}
@@ -179,6 +184,7 @@ if __name__ == "__main__":
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
 
+    tl.flush("client_timestamp.dat")
         # time.sleep(15)
     # for i in range(10):
     #     key = prefix + f"_{i}"

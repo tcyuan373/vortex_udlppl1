@@ -42,7 +42,7 @@ class StepBUDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
-        print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_B_vision_encoder.pt'
@@ -85,13 +85,13 @@ class StepBUDL(UserDefinedLogic):
         res_json_str = blob_bytes.decode('utf-8')
         rec_dict = json.loads(res_json_str)
         
-        print(f"GOT MY ID AS: {self.my_id}")
+        # print(f"GOT MY ID AS: {self.my_id}")
         # list_of_images = deserialize_string_list(blob.tobytes())
         # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
         # reconstructed_np_array = np.frombuffer(blob, dtype=np.float32).reshape(-1, 1, 3, 224, 224)
         # input_tensor = torch.Tensor(reconstructed_np_array)
         
-        print('==========Step B+C start loading model==========')
+        # print('==========Step B+C start loading model==========')
 
         if self.query_vision_projection == None:
             self.load_model_cpu()
@@ -100,7 +100,7 @@ class StepBUDL(UserDefinedLogic):
             self.stepc.load_model_gpu()
             
         input_tensor = torch.Tensor(rec_dict["pixel_values"]).to(self.device)
-        print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
+        # print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
         batch_size = input_tensor.shape[0]
         # Forward the vision encoder
         if len(input_tensor.shape) == 5:
@@ -116,10 +116,10 @@ class StepBUDL(UserDefinedLogic):
     
         vision_second_last_layer_hidden_states = vision_encoder_outputs.hidden_states[-2][:, 1:]
         
-        print('==========Step B Finished ==========')        
+        # print('==========Step B Finished ==========')        
         transformer_mapping_input_feature = self.stepc.stepC_output(vision_second_last_layer_hidden_states)
-        print(f'the shape of hs: {transformer_mapping_input_feature.shape} | and for ve: {vision_embeddings.shape}')
-        print('==========Step C Finished ==========')
+        # print(f'the shape of hs: {transformer_mapping_input_feature.shape} | and for ve: {vision_embeddings.shape}')
+        # print('==========Step C Finished ==========')
         # ve_result = {}
         # hs_result = {}
         # ve_result['vision_embeddings'] = vision_embeddings.tolist()

@@ -46,7 +46,7 @@ class StepAUDL(UserDefinedLogic):
         '''
         super(StepAUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
@@ -99,18 +99,18 @@ class StepAUDL(UserDefinedLogic):
         res_json_str = blob_bytes.decode('utf-8')
         encoded_inputs = json.loads(res_json_str)
         
-        print('===========Step A start loading model==========')
+        # print('===========Step A start loading model==========')
         if self.query_text_encoder_linear == None:
             self.load_model_cpu()
             self.load_model_gpu()
         # encoded_inputs      = self.query_tokenizer(string_list)
         input_ids           = torch.LongTensor(encoded_inputs['input_ids']).to(self.device)
         attention_mask      = torch.Tensor(encoded_inputs['attention_mask']).to(self.device)
-        print(f"STEP A Got input ids of shape: {input_ids.shape} | attn_mask of shape: {attention_mask.shape}")
+        # print(f"STEP A Got input ids of shape: {input_ids.shape} | attn_mask of shape: {attention_mask.shape}")
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
         text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)
-        print('==========Step A finished forward pass==========')
+        # print('==========Step A finished forward pass==========')
         # print(f'text embedding of shape: \t {text_embeddings.shape}')
         # print(f'input ids of shape: \t\t {text_embeddings.shape}')
         # print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
@@ -133,8 +133,7 @@ class StepAUDL(UserDefinedLogic):
         new_key =  prefix + key_id
         res = self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
-        if not res:
-            print("CAPI put failed!!!")
+
         
         
         
