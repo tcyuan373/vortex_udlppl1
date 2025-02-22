@@ -18,7 +18,7 @@ from flmr import (
 from datasets import load_dataset
 
 
-
+MONO_SHARD_ID = 1
 
 def process_img_2_nparray(img_root, image_processor):
     img_paths = [os.path.join(img_root, item) for item in os.listdir(img_root)]
@@ -117,7 +117,6 @@ if __name__ == "__main__":
     prefix          = "/Mono/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
-    shard_index     = 0
     batch_size = 1
     num_batches = 100
     
@@ -175,13 +174,13 @@ if __name__ == "__main__":
         
         # resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
         #             subgroup_index=subgroup_index,shard_index=, message_id=1, trigger=True)
-        list_of_keys = ["question_id", "text_sequence", "input_ids", "attention_mask", "pixel_values", "question"]
+        list_of_keys = ["question_id", "text_sequence", "pixel_values", "question"]
         data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
         
         json_str = json.dumps(data2send_dict)
         byte_data = json_str.encode('utf-8')
         tl.log(10000, i, 0, 0)
         res = capi.put(prefix + f"_{i}", byte_data, subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=shard_index, message_id=i, trigger=True)
+                    subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
         
     tl.flush("mono_client_timestamp.dat")

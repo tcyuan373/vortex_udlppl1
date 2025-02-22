@@ -104,15 +104,13 @@ class Monolithic_UDL(UserDefinedLogic):
         
         examples = {}
         examples["text_sequence"] = raw_input['text_sequence']
-        # encoding = self.query_tokenizer(examples["text_sequence"])
-        examples["input_ids"] = raw_input["input_ids"]
-        examples["attention_mask"] = raw_input["attention_mask"]
         examples["pixel_values"] = torch.Tensor(raw_input["pixel_values"])
         examples["question_id"] = raw_input["question_id"]
         examples["question"] = raw_input['question']
         
-        input_ids = torch.LongTensor(examples["input_ids"]).to("cuda")
-        attention_mask = torch.LongTensor(examples["attention_mask"]).to("cuda")
+        encoding = self.query_tokenizer(examples["text_sequence"])
+        input_ids = torch.LongTensor(encoding["input_ids"]).to("cuda")
+        attention_mask = torch.LongTensor(encoding["attention_mask"]).to("cuda")
         pixel_values = torch.FloatTensor(examples["pixel_values"]).to("cuda")
         query_input = {
             "input_ids": input_ids,
