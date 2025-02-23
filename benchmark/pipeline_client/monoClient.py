@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-import numpy as np
-import os, sys
+import os
 import struct
 import torch
 import json
-from collections import defaultdict
 from easydict import EasyDict
 from derecho.cascade.external_client import ServiceClientAPI
 from derecho.cascade.external_client import TimestampLogger
@@ -16,24 +14,9 @@ from flmr import (
     FLMRQueryEncoderTokenizer,
 )
 from datasets import load_dataset
-
+from serialize_utils import DataBatcher
 
 MONO_SHARD_ID = 1
-
-def process_img_2_nparray(img_root, image_processor):
-    img_paths = [os.path.join(img_root, item) for item in os.listdir(img_root)]
-    list_of_images = []
-    pixel_values = []
-    for img_path in img_paths:
-        image = Image.open(img_path).convert("RGB")
-        list_of_images.append(image)
-   
-    for img in list_of_images:
-        encoded = image_processor(img, return_tensors="pt")
-        pixel_values.append(encoded.pixel_values)
-    pixel_values = torch.stack(pixel_values, dim=0)
-
-    return pixel_values.numpy().tobytes()
 
 
 def serialize_string_list(string_list):
@@ -56,7 +39,7 @@ def serialize_string_list(string_list):
     return serialized_data
 
 
-def prepare_inputs(sample):
+def prepare_text_sequence(sample):
     sample = EasyDict(sample)
 
     module = EasyDict(
@@ -117,8 +100,8 @@ if __name__ == "__main__":
     prefix          = "/Mono/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
-    batch_size = 1
-    num_batches = 100
+    batch_size      = 1
+    num_batches     = 10
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -138,7 +121,7 @@ if __name__ == "__main__":
                                             })[use_split].select([i for i in range(599)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
-    ds = ds.map(prepare_inputs)
+    ds = ds.map(prepare_text_sequence)
     ds = ds.map(
         tokenize_inputs,
         fn_kwargs={"query_tokenizer": query_tokenizer, "image_processor": image_processor},
@@ -154,8 +137,20 @@ if __name__ == "__main__":
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
+        batcher = DataBatcher()
+        
+        for qid in batch["question_id"]:
+            uds_idx =  int(qid.find("_"))
+            question_id = batch["question_id"][uds_idx+1:]
+            batcher.question_ids.append(question_id)
+        batcher.questions = batch["question"]
+        batcher.text_sequence = batch["text_sequence"] 
+        batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
             
-            
+        serialized = batcher.serialize()
+        tl.log(10000, i, 0, 0)
+        res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
         # stepa_data2send_keys = ["question_id", "text_sequence", "input_ids", "attention_mask"]
         # stepa_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in stepa_data2send_keys if k in batch}
         # stepa_key = prefix + f"text_{i}"
@@ -174,13 +169,15 @@ if __name__ == "__main__":
         
         # resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
         #             subgroup_index=subgroup_index,shard_index=, message_id=1, trigger=True)
-        list_of_keys = ["question_id", "text_sequence", "pixel_values", "question"]
-        data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
+        # list_of_keys = ["question_id", "text_sequence", "question"]
+        # data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
         
-        json_str = json.dumps(data2send_dict)
-        byte_data = json_str.encode('utf-8')
-        tl.log(10000, i, 0, 0)
-        res = capi.put(prefix + f"_{i}", byte_data, subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
+        # json_str = json.dumps(data2send_dict)
+        # byte_data = json_str.encode('utf-8')
+        # tl.log(10000, i, 0, 0)
+        # res = capi.put(prefix + f"_{i}", byte_data, subgroup_type=subgroup_type,
+        #             subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
+        
+        
         
     tl.flush("mono_client_timestamp.dat")

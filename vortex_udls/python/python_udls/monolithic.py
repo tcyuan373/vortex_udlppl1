@@ -1,35 +1,20 @@
-import os
 import json
-from collections import defaultdict
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
-
-import numpy as np
 import torch
-from colbert import Indexer, Searcher
-from colbert.data import Queries
-from colbert.infra import ColBERTConfig, Run, RunConfig
 from easydict import EasyDict
-from PIL import Image
-
-from transformers import (
-    AutoImageProcessor,
-    AutoModel,
-    AutoTokenizer,
-)
+import numpy as np
+from transformers import AutoImageProcessor
 from flmr import (
     FLMRModelForRetrieval,
     FLMRQueryEncoderTokenizer,
     FLMRContextEncoderTokenizer,
     FLMRConfig,
 )
-from flmr import index_custom_collection
 from flmr import create_searcher, search_custom_collection
-
-import time
-
+from serialize_utils import DataBatcher
 
 
 class Monolithic_UDL(UserDefinedLogic):
@@ -75,7 +60,6 @@ class Monolithic_UDL(UserDefinedLogic):
         self.image_processor = AutoImageProcessor.from_pretrained(self.image_processor_name)
         
         
-        
     def load_model_gpu(self):
         self.flmr_model = self.flmr_model.to("cuda")
         self.searcher = create_searcher(
@@ -88,13 +72,14 @@ class Monolithic_UDL(UserDefinedLogic):
         
     
     def ocdpo_handler(self,**kwargs):
+        bsize               = 32
         key                 = kwargs["key"]
         blob                = kwargs["blob"]
-        bytes_obj           = blob.tobytes()
-        json_str_decoded    = bytes_obj.decode('utf-8')
-        raw_input           = json.loads(json_str_decoded)
-        bsize               = 32
-         
+        bytes_obj           = blob.view(dypte=np.uint8)
+        # json_str_decoded    = bytes_obj.decode('utf-8')
+        new_batcher = DataBatcher()
+        new_batcher.deserialize(bytes_obj)
+        
         
         if self.flmr_model == None:
             self.load_model_cpu()
@@ -103,10 +88,13 @@ class Monolithic_UDL(UserDefinedLogic):
             self.load_model_gpu()
         
         examples = {}
-        examples["text_sequence"] = raw_input['text_sequence']
-        examples["pixel_values"] = torch.Tensor(raw_input["pixel_values"])
-        examples["question_id"] = raw_input["question_id"]
-        examples["question"] = raw_input['question']
+        examples["pixel_values"] = torch.Tensor(new_batcher.pixel_values)
+        examples["question_id"] = []
+        for qid in new_batcher.question_ids:
+            examples["question_id"].append(f"EVQA_{qid}")
+        examples["question"] = new_batcher.questions
+        examples["text_sequence"] = new_batcher.text_sequence
+        
         
         encoding = self.query_tokenizer(examples["text_sequence"])
         input_ids = torch.LongTensor(encoding["input_ids"]).to("cuda")
