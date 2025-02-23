@@ -127,7 +127,7 @@ class DataBatcher:
         Assumes the same layout as produced by serialize().
         """
         self._bytes = data
-        buffer = data.tobytes()
+        buffer = data
         offset = 0
         
         # --- Read header ---
@@ -206,13 +206,12 @@ if __name__ == '__main__':
     # Serialize into one contiguous byte buffer.
     serialized = batcher.serialize()
     
-    data2send = serialized.tobytes()
     
-    data2send.view(dtype=np.uint8)
+    # data2send = serialized.tobytes()
     # serialized = serialized.view(dtype=np.uint8)
     # Deserialize the data back.
     new_batcher = DataBatcher()
-    new_batcher.deserialize(data2send)
+    new_batcher.deserialize(serialized)
     
     # Verify round-trip equality.
     data = new_batcher.get_data()
