@@ -23,9 +23,9 @@ if __name__ == "__main__":
                     text_config=flmr_config.text_config, 
                     subfolder="context_tokenizer")
     image_processor = AutoImageProcessor.from_pretrained('openai/clip-vit-large-patch14')
-    # flmr_model = FLMRModelForRetrieval.from_pretrained(
-    #     checkpoint_path,
-    #     query_tokenizer = query_tokenizer,
-    #     context_tokenizer = context_tokenizer,
-    #     )
+    flmr_model = FLMRModelForRetrieval.from_pretrained(
+        checkpoint_path,
+        query_tokenizer = query_tokenizer,
+        context_tokenizer = context_tokenizer,
+        )
     
