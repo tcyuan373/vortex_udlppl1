@@ -89,7 +89,7 @@ class Monolithic_UDL(UserDefinedLogic):
         
         examples = {}
         examples["pixel_values"] = torch.Tensor(data["pixel_values"])
-        print(f"GOT PV shape: {examples["pixel_values"].shape}")
+        print(f"GOT PV shape: {examples['pixel_values'].shape}")
         examples["question_id"] = []
         for qid in data["question_ids"]:
             examples["question_id"].append(f"EVQA_{qid}")
