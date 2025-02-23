@@ -148,7 +148,8 @@ if __name__ == "__main__":
         batcher.text_sequence = batch["text_sequence"] 
         print(f"Check text sequence: {batch['text_sequence']}")
         batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-            
+        print(f"before sending, check PV size to be {torch.Tensor(batch['pixel_values']).numpy().shape}")    
+        
         serialized = batcher.serialize()
         tl.log(10000, i, 0, 0)
         res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,

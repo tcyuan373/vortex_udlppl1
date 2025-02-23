@@ -121,7 +121,6 @@ class DataBatcher:
             length = int(m["question_length"])
             questions.append(questions_bytes[start:start+length].tobytes().decode("utf-8"))
             
-        print(f"Got questios: {questions}")
         # --- Read text_sequence segment ---
         total_text_seq_size = sum(int(x) for x in metadata_array["text_sequence_length"])
         text_seq_bytes = buffer[offset:offset+total_text_seq_size]
@@ -132,12 +131,11 @@ class DataBatcher:
             length = int(m["text_sequence_length"])
             text_sequence.append(text_seq_bytes[start:start+length].tobytes().decode("utf-8"))
             
-        print(f"Got text seq: {text_sequence}")
         # --- Read pixel_values segment ---
-        pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
+        pixel_values_size = batch_size * 1 * 3 * 224 * 224 * np.dtype(np.float32).itemsize
         pixel_values_bytes = buffer[offset:offset+pixel_values_size]
         offset += pixel_values_size
-        pixel_values = np.frombuffer(pixel_values_bytes, dtype=np.float32).reshape((batch_size, 1, 224, 224))
+        pixel_values = np.frombuffer(pixel_values_bytes, dtype=np.float32).reshape((batch_size, 1, 3,224, 224))
         # Restore fields.
         
         self.question_ids = qids
