@@ -134,7 +134,7 @@ if __name__ == "__main__":
         idx = torch.randint(0, 500, (1,)).item()
         batch = ds[idx : idx + batch_size]
         if (i // batch_size) >= num_batches:    
-            # print(f"Batch no. {i // batch_size} reached!  Now break")
+            print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
         batcher = DataBatcher()
