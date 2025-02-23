@@ -89,7 +89,7 @@ class Monolithic_UDL(UserDefinedLogic):
         
         examples = {}
         examples["pixel_values"] = torch.Tensor(data["pixel_values"])
-        print(f"GOT PV shape: {examples['pixel_values'].shape}")
+        # print(f"GOT PV shape: {examples['pixel_values'].shape}")
         examples["question_id"] = []
         for qid in data["question_ids"]:
             examples["question_id"].append(f"EVQA_{qid}")
@@ -109,7 +109,7 @@ class Monolithic_UDL(UserDefinedLogic):
         query_embeddings = self.flmr_model.query(**query_input).late_interaction_output
         query_embeddings = query_embeddings.detach().cpu()
         
-        print(f"Got Qembeds of size: {query_embeddings.shape}")
+        # print(f"Got Qembeds of size: {query_embeddings.shape}")
         
         queries = {
             question_id: question for question_id, question in zip(examples["question_id"], examples["question"])
@@ -123,13 +123,13 @@ class Monolithic_UDL(UserDefinedLogic):
             centroid_search_batch_size=bsize,
         )
         
-        print(f'For batch number {int(kwargs["message_id"])} got ranking dictionary: {ranking.todict()}')
+        # print(f'For batch number {int(kwargs["message_id"])} got ranking dictionary: {ranking.todict()}')
         self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
         # if int(kwargs["message_id"]) % 5 ==0:
         #     print(f"Now processing batch no.{int(kwargs['message_id'])}")
         #     print(f"Got ranking dict: {ranking.todict()}")
             
-        if int(kwargs["message_id"]) == 9:
+        if int(kwargs["message_id"]) == 99:
             self.tl.flush(f"mono_node_{self.my_id}_timestamp.dat")
             print("TL flushed!!!")
         
