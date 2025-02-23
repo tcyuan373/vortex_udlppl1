@@ -136,7 +136,7 @@ class StepEUDL(UserDefinedLogic):
         # print('==========Finished Searching==========')
         # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
         # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
-        self.tl.log(20001, batch_id, 0, 0)
+        self.tl.log(20010, batch_id, 0, 0)
         
         # erase the batch id dict{} 
         del self.collected_intermediate_results[batch_id]
