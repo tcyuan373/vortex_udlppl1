@@ -158,7 +158,7 @@ class DataBatcher:
         for m in metadata_array:
             start = int(m['question_offset'])
             length = int(m['question_length'])
-            questions.append(questions_bytes[start:start+length].decode('utf-8'))
+            questions.append(questions_bytes[start:start+length].tobytes().decode('utf-8'))
         
         # --- Read pixel_values segment ---
         pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
@@ -174,7 +174,7 @@ class DataBatcher:
         for m in metadata_array:
             start = int(m['text_sequence_offset'])
             length = int(m['text_sequence_length'])
-            text_sequence.append(text_seq_bytes[start:start+length].decode('utf-8'))
+            text_sequence.append(text_seq_bytes[start:start+length].tobytes().decode('utf-8'))
         
         # Restore fields.
         self.question_ids = qids
@@ -206,10 +206,13 @@ if __name__ == '__main__':
     # Serialize into one contiguous byte buffer.
     serialized = batcher.serialize()
     
-    serialized = serialized.view(dtype=np.uint8)
+    data2send = serialized.tobytes()
+    
+    data2send.view(dtype=np.uint8)
+    # serialized = serialized.view(dtype=np.uint8)
     # Deserialize the data back.
     new_batcher = DataBatcher()
-    new_batcher.deserialize(serialized)
+    new_batcher.deserialize(data2send)
     
     # Verify round-trip equality.
     data = new_batcher.get_data()
