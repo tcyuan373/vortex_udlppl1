@@ -8,6 +8,9 @@ class DataBatcher:
         self.question_ids = []           # List of ints (one per query)
         self.questions = []              # List of strings (one per query)
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        
+    def utf8_length(self, s: str) -> int:
+        return sum(1 + (ord(c) >= 0x80) + (ord(c) >= 0x800) + (ord(c) >= 0x10000) for c in s)
     
     def serialize(self) -> np.ndarray:
         """
@@ -89,6 +92,7 @@ class DataBatcher:
         # --- Write questions segment ---
         questions_start = qids_start + qids_size
         pos = questions_start
+        
         for enc in question_encodings:
             n = len(enc)
             # Encode once and write directly.
@@ -103,8 +107,14 @@ class DataBatcher:
         # --- Write text_sequence segment ---
         text_seq_start = pixel_values_start + pixel_values_size
         pos = text_seq_start
+        for t in self.text_sequence:
+            tlen = self.utf8_length(t)
+            print(f"Check q len as: {tlen}")
+        
+        
         for enc in text_seq_encodings:
             n = len(enc)
+            print(f"Got n as: {n}")
             buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
             pos += n
         
@@ -179,7 +189,8 @@ class DataBatcher:
             "pixel_values": self.pixel_values,
             "text_sequence": self.text_sequence
         }
-
+        
+    
 # ---------------------------
 # Example usage:
 # ---------------------------
@@ -188,7 +199,7 @@ if __name__ == '__main__':
     batcher = DataBatcher()
     batcher.question_ids = [101, 102, 103]
     batcher.questions = ["What is AI?", "How to serialize data?", "Example question."]
-    batcher.text_sequence = ["AI", "serialize", "example"]
+    batcher.text_sequence = ['::::AI', "seriali:::ze", "example<::::<>?LPQ!@$%^&*(&@)"]
     # Create dummy pixel values (3 images, each shape (1, 224, 224), dtype float32)
     batcher.pixel_values = np.random.rand(3, 1, 224, 224).astype(np.float32)
     

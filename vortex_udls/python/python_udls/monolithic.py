@@ -79,7 +79,7 @@ class Monolithic_UDL(UserDefinedLogic):
         # json_str_decoded    = bytes_obj.decode('utf-8')
         new_batcher = DataBatcher()
         new_batcher.deserialize(bytes_obj)
-        
+        data = new_batcher.get_data()
         
         if self.flmr_model == None:
             self.load_model_cpu()
@@ -88,12 +88,12 @@ class Monolithic_UDL(UserDefinedLogic):
             self.load_model_gpu()
         
         examples = {}
-        examples["pixel_values"] = torch.Tensor(new_batcher.pixel_values)
+        examples["pixel_values"] = torch.Tensor(data["pixel_values"])
         examples["question_id"] = []
-        for qid in new_batcher.question_ids:
+        for qid in data["question_ids"]:
             examples["question_id"].append(f"EVQA_{qid}")
-        examples["question"] = new_batcher.questions
-        examples["text_sequence"] = new_batcher.text_sequence
+        examples["question"] = data["questions"]
+        examples["text_sequence"] = data["text_sequence"]
         
         
         encoding = self.query_tokenizer(examples["text_sequence"])

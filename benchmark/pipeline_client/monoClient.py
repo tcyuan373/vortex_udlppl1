@@ -146,6 +146,7 @@ if __name__ == "__main__":
             batcher.question_ids.append(question_id)
         batcher.questions = batch["question"]
         batcher.text_sequence = batch["text_sequence"] 
+        print(f"Check text sequence: {batch['text_sequence']}")
         batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
             
         serialized = batcher.serialize()
