@@ -75,7 +75,7 @@ class Monolithic_UDL(UserDefinedLogic):
         bsize               = 32
         key                 = kwargs["key"]
         blob                = kwargs["blob"]
-        bytes_obj           = blob.view(dypte=np.uint8)
+        bytes_obj           = blob.view(dtype=np.uint8)
         # json_str_decoded    = bytes_obj.decode('utf-8')
         new_batcher = DataBatcher()
         new_batcher.deserialize(bytes_obj)

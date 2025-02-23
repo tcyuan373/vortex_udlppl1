@@ -139,9 +139,10 @@ if __name__ == "__main__":
         
         batcher = DataBatcher()
         
+        print(f"Got qid list : {batch['question_id']}")
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
-            question_id = batch["question_id"][uds_idx+1:]
+            question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
         batcher.questions = batch["question"]
         batcher.text_sequence = batch["text_sequence"] 
