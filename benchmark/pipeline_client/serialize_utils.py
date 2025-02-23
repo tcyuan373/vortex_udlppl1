@@ -170,6 +170,10 @@ class DataBatcher:
         total_text_seq_size = sum(int(x) for x in metadata_array['text_sequence_length'])
         text_seq_bytes = buffer[offset:offset+total_text_seq_size]
         offset += total_text_seq_size
+        
+        
+        print(f"Got questions: {questions}")
+        
         text_sequence = []
         for m in metadata_array:
             start = int(m['text_sequence_offset'])
@@ -206,7 +210,7 @@ if __name__ == '__main__':
     # Serialize into one contiguous byte buffer.
     serialized = batcher.serialize()
     
-    
+
     # data2send = serialized.tobytes()
     # serialized = serialized.view(dtype=np.uint8)
     # Deserialize the data back.
