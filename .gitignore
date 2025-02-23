@@ -41,3 +41,4 @@ build-*
 
 FLMR
 scripts/faiss
+benchmark/perf_data/
