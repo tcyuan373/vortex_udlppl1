@@ -153,32 +153,6 @@ if __name__ == "__main__":
         tl.log(10000, i, 0, 0)
         res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
-        # stepa_data2send_keys = ["question_id", "text_sequence", "input_ids", "attention_mask"]
-        # stepa_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in stepa_data2send_keys if k in batch}
-        # stepa_key = prefix + f"text_{i}"
-        # stepa_json_str = json.dumps(stepa_data2send_dict)
-        # stepa_byte_data = stepa_json_str.encode('utf-8')
-        # tl.log(10000 ,i ,0 ,0 )
-        # resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
-        #             subgroup_index=subgroup_index,shard_index=, message_id=1, as_trigger=True, blokcing=True)
-        
-
-        # stepb_data2send_keys = ["pixel_values"]
-        # stepb_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) else batch[k] for k in stepb_data2send_keys if k in batch}
-        # stepb_key = prefix + f"vision_{i}"
-        # stepb_json_str = json.dumps(stepb_data2send_dict)
-        # stepb_byte_data = stepb_json_str.encode('utf-8')
-        
-        # resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
-        #             subgroup_index=subgroup_index,shard_index=, message_id=1, trigger=True)
-        # list_of_keys = ["question_id", "text_sequence", "question"]
-        # data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in list_of_keys if k in batch}
-        
-        # json_str = json.dumps(data2send_dict)
-        # byte_data = json_str.encode('utf-8')
-        # tl.log(10000, i, 0, 0)
-        # res = capi.put(prefix + f"_{i}", byte_data, subgroup_type=subgroup_type,
-        #             subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
         
         
         

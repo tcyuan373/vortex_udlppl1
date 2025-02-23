@@ -124,8 +124,11 @@ class Monolithic_UDL(UserDefinedLogic):
         
         # print(f'Got ranking dictionary: {ranking.todict()}')
         self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
-        
-        if int(kwargs["message_id"]) == 99:
+        if int(kwargs["message_id"]) % 5 ==0:
+            print(f"Now processing batch no.{int(kwargs["message_id"])}")
+            print(f"Got ranking dict: {ranking.todict()}")
+            
+        if int(kwargs["message_id"]) == 9:
             self.tl.flush(f"mono_node_{self.my_id}_timestamp.dat")
             print("TL flushed!!!")
         
