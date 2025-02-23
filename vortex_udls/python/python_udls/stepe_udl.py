@@ -93,6 +93,7 @@ class StepEUDL(UserDefinedLogic):
         question_ids        = cluster_result['question_id']
         bsize               = 32
         
+        
         # queries = {question_id[i]: queries_texts[i] for i in range(len(queries_texts))}
         assert len(queries_texts) == len(question_ids)
         queries = dict(zip(question_ids, queries_texts))
@@ -101,6 +102,7 @@ class StepEUDL(UserDefinedLogic):
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
         
+        self.tl.log(20000, batch_id, 0, 0)
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
             
@@ -134,11 +136,11 @@ class StepEUDL(UserDefinedLogic):
         # print('==========Finished Searching==========')
         # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
         # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
-        self.tl.log(20000, batch_id, 0, 0)
+        self.tl.log(20001, batch_id, 0, 0)
         
         # erase the batch id dict{} 
         del self.collected_intermediate_results[batch_id]
-        if batch_id == 99:
+        if batch_id == 49:
             self.tl.flush(f"node{self.my_id}_udls_timestamp.dat")
             print("Time Log Flushed!!!")
         
