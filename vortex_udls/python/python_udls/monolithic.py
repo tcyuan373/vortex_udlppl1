@@ -66,7 +66,7 @@ class Monolithic_UDL(UserDefinedLogic):
             index_root_path=self.index_root_path,
             index_experiment_name=self.index_experiment_name,
             index_name=self.index_name,
-            nbits=8, # number of bits in compression
+            nbits=self.nbits, # number of bits in compression
             use_gpu=True, # break if set to False, see doc: https://docs.google.com/document/d/1KuWGWZrxURkVxDjFRy1Qnwsy7jDQb-RhlbUzm_A-tOs/edit?tab=t.0
         )
         
@@ -89,6 +89,7 @@ class Monolithic_UDL(UserDefinedLogic):
         
         examples = {}
         examples["pixel_values"] = torch.Tensor(data["pixel_values"])
+        print(f"GOT PV shape: {examples["pixel_values"].shape}")
         examples["question_id"] = []
         for qid in data["question_ids"]:
             examples["question_id"].append(f"EVQA_{qid}")

@@ -16,7 +16,7 @@ from flmr import (
 from datasets import load_dataset
 from serialize_utils import DataBatcher
 
-MONO_SHARD_ID = 1
+MONO_SHARD_ID = 3
 
 
 def serialize_string_list(string_list):
