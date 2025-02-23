@@ -80,6 +80,7 @@ class Monolithic_UDL(UserDefinedLogic):
         new_batcher = DataBatcher()
         new_batcher.deserialize(blob)
         data = new_batcher.get_data()
+        np_pixel_vals = np.copy(data["pixel_values"])
         
         if self.flmr_model == None:
             self.load_model_cpu()
@@ -88,7 +89,7 @@ class Monolithic_UDL(UserDefinedLogic):
             self.load_model_gpu()
         
         examples = {}
-        examples["pixel_values"] = torch.Tensor(data["pixel_values"])
+        examples["pixel_values"] = torch.Tensor(np_pixel_vals)
         # print(f"GOT PV shape: {examples['pixel_values'].shape}")
         examples["question_id"] = []
         for qid in data["question_ids"]:
