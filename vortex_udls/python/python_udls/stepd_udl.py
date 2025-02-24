@@ -4,6 +4,7 @@ import json
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
 import torch
 from torch import Tensor, nn
 from transformers import BertConfig
@@ -47,6 +48,7 @@ class StepDUDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
+        self.tl = TimestampLogger()
         # modeling configs
         self.flmr_config = None
         self.skiplist = []
@@ -220,7 +222,7 @@ class StepDUDL(UserDefinedLogic):
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
 
-        
+        self.tl.log(30000, batch_id, 0, 0)
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
         if step_A_idx != -1:
@@ -272,7 +274,11 @@ class StepDUDL(UserDefinedLogic):
         res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
 
+        self.tl.log(30010, batch_id, 0, 0)
         
+        if batch_id == 49:
+            self.tl.flush(f"node{self.my_id}_STEPD_udls_timestamp.dat")
+            print("StepD TL flushed!!!")
         # garbage cleaning via emit and del
         del self.collected_intermediate_results[batch_id]
         

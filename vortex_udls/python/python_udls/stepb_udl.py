@@ -3,6 +3,8 @@ import json
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
+
 import torch
 from torch import nn
 from flmr import FLMRConfig, FLMRVisionModel
@@ -42,6 +44,7 @@ class StepBUDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
+        self.tl = TimestampLogger()
         # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
@@ -85,6 +88,9 @@ class StepBUDL(UserDefinedLogic):
         res_json_str = blob_bytes.decode('utf-8')
         rec_dict = json.loads(res_json_str)
         
+        key_id = key[int(key.find('_'))+1:]
+        batch_id = int(key_id)
+        self.tl.log(20051, batch_id, 0, 0)
         # print(f"GOT MY ID AS: {self.my_id}")
         # list_of_images = deserialize_string_list(blob.tobytes())
         # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
@@ -130,6 +136,8 @@ class StepBUDL(UserDefinedLogic):
         # hsres_json_byte = hsres_json_str.encode('utf-8')
         
         
+        
+        
         ve = vision_embeddings.detach().cpu().numpy().tobytes()
         hs = transformer_mapping_input_feature.detach().cpu().numpy().tobytes()
         
@@ -138,7 +146,7 @@ class StepBUDL(UserDefinedLogic):
         hs_prefix = "/stepD/stepBhs_"
         # indices = [i for i, char in enumerate(key) if char == "/"]
         # key_id = key[int(indices[-1]):]
-        key_id = key[int(key.find('_'))+1:]
+        
         ve_key = ve_prefix + key_id
         hs_key = hs_prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
@@ -151,7 +159,11 @@ class StepBUDL(UserDefinedLogic):
         reshs = self.capi.put(hs_key,hs,subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
                       message_id=1, as_trigger=True, blocking=False)
+        self.tl.log(20100, batch_id, 0, 0)
         
+        if batch_id == 49:
+            self.tl.flush(f"node{self.my_id}_STEPB_udls_timestamp.dat")
+            print("STEPB TL flushed!!!")
         
     def __del__(self):
         '''

@@ -7,6 +7,8 @@ import warnings
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
+from derecho.cascade.member_client import TimestampLogger
+
 import os
 import torch
 from torch import Tensor, nn
@@ -48,7 +50,8 @@ class StepAUDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
-        
+        self.my_id = self.capi.get_my_id()
+        self.tl = TimestampLogger()
         self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_A_query_text_encoder.pt'
         self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_A_query_text_linear.pt'
@@ -99,6 +102,10 @@ class StepAUDL(UserDefinedLogic):
         res_json_str = blob_bytes.decode('utf-8')
         encoded_inputs = json.loads(res_json_str)
         
+        
+        key_id = key[int(key.find('_'))+1:]
+        batch_id = int(key_id)
+        self.tl.log(20041, batch_id, 0, 0)
         # print('===========Step A start loading model==========')
         if self.query_text_encoder_linear == None:
             self.load_model_cpu()
@@ -129,11 +136,14 @@ class StepAUDL(UserDefinedLogic):
         
         # indices = [i for i, char in enumerate(key) if char == "/"]
         # key_id = key[int(indices[-1]):]
-        key_id = key[int(key.find('_'))+1:]
+        
         new_key =  prefix + key_id
         res = self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
-
+        self.tl.log(20041, batch_id, 0, 0)
+        if batch_id==49:
+            self.tl.flush(f"node{self.my_id}_STEPA_udls_timestamp.dat")
+            print("STEPA TL flushed!!!")
         
         
         
