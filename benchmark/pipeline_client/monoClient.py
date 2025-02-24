@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os
+import os, time
 import struct
 import torch
 import json
@@ -134,27 +134,27 @@ if __name__ == "__main__":
         idx = torch.randint(0, 500, (1,)).item()
         batch = ds[idx : idx + batch_size]
         if (i // batch_size) >= num_batches:    
-            print(f"Batch no. {i // batch_size} reached!  Now break")
+            # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
         batcher = DataBatcher()
         
-        print(f"Got qid list : {batch['question_id']}")
+        # print(f"Got qid list : {batch['question_id']}")
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
             question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
         batcher.questions = batch["question"]
         batcher.text_sequence = batch["text_sequence"] 
-        print(f"Check text sequence: {batch['text_sequence']}")
+        # print(f"Check text sequence: {batch['text_sequence']}")
         batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-        print(f"before sending, check PV size to be {torch.Tensor(batch['pixel_values']).numpy().shape}")    
+        # print(f"before sending, check PV size to be {torch.Tensor(batch['pixel_values']).numpy().shape}")    
         
         serialized = batcher.serialize()
         tl.log(10000, i, 0, 0)
         res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
         
-        
+        time.sleep(5)
         
     tl.flush("mono_client_timestamp.dat")

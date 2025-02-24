@@ -102,7 +102,7 @@ class StepEUDL(UserDefinedLogic):
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
         
-        self.tl.log(20000, batch_id, 0, 0)
+        self.tl.log(40000, batch_id, 0, 0)
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
             
@@ -136,7 +136,7 @@ class StepEUDL(UserDefinedLogic):
         # print('==========Finished Searching==========')
         # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
         # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
-        self.tl.log(20010, batch_id, 0, 0)
+        self.tl.log(40100, batch_id, 0, 0)
         
         # erase the batch id dict{} 
         del self.collected_intermediate_results[batch_id]

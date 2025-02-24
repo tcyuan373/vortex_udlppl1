@@ -183,7 +183,8 @@ if __name__ == "__main__":
         
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
-
+        time.sleep(5)
+        
     tl.flush("client_timestamp.dat")
         # time.sleep(15)
     # for i in range(10):
