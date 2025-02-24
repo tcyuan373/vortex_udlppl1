@@ -252,19 +252,19 @@ class StepDUDL(UserDefinedLogic):
             return
         
         self.tl.log(30010, batch_id, 0, 0)
-        
+        cur_batch = self.collected_intermediate_results[batch_id]
         # call step E functions using  self.collected_intermediate_results[batch_id]
         batch_query_embeddings = self.proces_queries(   
-                                    self.collected_intermediate_results[batch_id]._input_ids,
-                                    self.collected_intermediate_results[batch_id]._text_embeddings,
-                                    self.collected_intermediate_results[batch_id]._text_encoder_hidden_states,
-                                    self.collected_intermediate_results[batch_id]._vision_embeddings,
-                                    self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature,
+                                    cur_batch._input_ids,
+                                    cur_batch._text_embeddings,
+                                    cur_batch._text_encoder_hidden_states,
+                                    cur_batch._vision_embeddings,
+                                    cur_batch._transformer_mapping_input_feature,
                                         )
         
         # print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
 
-
+        self.tl.log(30011, batch_id, 0, 0)
         # self.collected_intermediate_results.erase(batch_id)
         
         result = {}
@@ -279,7 +279,7 @@ class StepDUDL(UserDefinedLogic):
         res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
 
-        self.tl.log(30011, batch_id, 0, 0)
+        self.tl.log(30020, batch_id, 0, 0)
         
         if batch_id == 49:
             self.tl.flush(f"node{self.my_id}_STEPD_udls_timestamp.dat")
