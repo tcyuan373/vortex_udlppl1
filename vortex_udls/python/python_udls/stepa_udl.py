@@ -140,7 +140,7 @@ class StepAUDL(UserDefinedLogic):
         new_key =  prefix + key_id
         res = self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
-        self.tl.log(20041, batch_id, 0, 0)
+        self.tl.log(20050, batch_id, 0, 0)
         if batch_id==49:
             self.tl.flush(f"node{self.my_id}_STEPA_udls_timestamp.dat")
             print("STEPA TL flushed!!!")

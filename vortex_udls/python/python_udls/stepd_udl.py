@@ -48,6 +48,7 @@ class StepDUDL(UserDefinedLogic):
         self.conf = json.loads(conf_str)
         # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
+        self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
         # modeling configs
         self.flmr_config = None
