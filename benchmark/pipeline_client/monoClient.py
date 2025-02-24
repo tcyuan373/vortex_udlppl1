@@ -107,7 +107,7 @@ if __name__ == "__main__":
     image_processor_name = 'openai/clip-vit-large-patch14'
     ds_dir = "/mydata/EVQA_datasets/EVQA_data"
     image_root_dir = "/mydata/EVQA_datasets"
-    use_split = "train"
+    use_split = "test"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
     query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,

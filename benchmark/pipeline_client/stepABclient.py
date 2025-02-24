@@ -127,7 +127,7 @@ if __name__ == "__main__":
     image_processor_name = 'openai/clip-vit-large-patch14'
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_root_dir = "/mydata/EVQA_datasets"
-    use_split = "train"
+    use_split = "test"
     ds_dir = "/mydata/EVQA_datasets/EVQA_data"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)

@@ -28,7 +28,7 @@ class Monolithic_UDL(UserDefinedLogic):
         self.tl = TimestampLogger()
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
-        self.index_experiment_name  = 'EVQA_train_split'
+        self.index_experiment_name  = 'EVQA_test_split'
         self.checkpoint_path        = 'LinWeizheDragon/PreFLMR_ViT-L'
         self.image_processor_name   = 'openai/clip-vit-large-patch14'
         self.Ks                     = [1]
