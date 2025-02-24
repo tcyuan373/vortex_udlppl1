@@ -20,7 +20,7 @@ import time
 
 
 
-STEPA_SHARD_INDEX = 0
+STEPA_SHARD_INDEX = 3
 STEPB_SHARD_INDEX = 1
 STEPA_SUBGROUP_INDEX = 0
 STEPB_SUBGROUP_INDEX = 0
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 1
-    num_batches = 50
+    num_batches = 100
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -183,7 +183,7 @@ if __name__ == "__main__":
         
         resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
-        time.sleep(5)
+        time.sleep(2)
         
     tl.flush("client_timestamp.dat")
         # time.sleep(15)

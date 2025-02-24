@@ -11,7 +11,7 @@ from transformers.models.bert.modeling_bert import BertEncoder
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer
 
 
-STEPD_NEXT_UDL_SHARD_INDEX = 3
+STEPD_NEXT_UDL_SHARD_INDEX = 0
 
 class IntermediateResult:
     def __init__(self):
