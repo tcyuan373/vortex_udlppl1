@@ -223,13 +223,15 @@ class StepDUDL(UserDefinedLogic):
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
 
-        self.tl.log(30000, batch_id, 0, 0)
         if not self.collected_intermediate_results.get(batch_id):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
         if step_A_idx != -1:
+            self.tl.log(30000, batch_id, 1, 0)
             blob_bytes = blob.tobytes()
             res_json_str = blob_bytes.decode('utf-8')
             blob_data = json.loads(res_json_str)
+            
+            
             self.collected_intermediate_results[batch_id]._question_id = blob_data['question_id']
             self.collected_intermediate_results[batch_id]._queries = blob_data['queries']
             self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(blob_data["input_ids"])
@@ -237,10 +239,12 @@ class StepDUDL(UserDefinedLogic):
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             
         elif step_Bve_idx != -1:
+            self.tl.log(30000, batch_id, 2, 0)
             reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 32, 128)
             self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(reconstructed_np)
             
         elif step_Bhs_idx != -1:
+            self.tl.log(30000, batch_id, 3, 0)
             reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 768)
             self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(reconstructed_np)
             
