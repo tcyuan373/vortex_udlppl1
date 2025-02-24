@@ -251,7 +251,7 @@ class StepDUDL(UserDefinedLogic):
         if not self.collected_intermediate_results[batch_id].collected_all():
             return
         
-        
+        self.tl.log(30010, batch_id, 0, 0)
         
         # call step E functions using  self.collected_intermediate_results[batch_id]
         batch_query_embeddings = self.proces_queries(   
@@ -279,7 +279,7 @@ class StepDUDL(UserDefinedLogic):
         res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
 
-        self.tl.log(30010, batch_id, 0, 0)
+        self.tl.log(30011, batch_id, 0, 0)
         
         if batch_id == 49:
             self.tl.flush(f"node{self.my_id}_STEPD_udls_timestamp.dat")
