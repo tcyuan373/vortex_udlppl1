@@ -131,8 +131,8 @@ if __name__ == "__main__":
     )
     
     for i in range(0, len(ds), batch_size):
-        idx = torch.randint(0, 500, (1,)).item()
-        batch = ds[idx : idx + batch_size]
+        # idx = torch.randint(0, 500, (1,)).item()
+        batch = ds[i : i + batch_size]
         if (i // batch_size) >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break

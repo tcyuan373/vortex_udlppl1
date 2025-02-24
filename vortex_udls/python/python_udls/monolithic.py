@@ -82,7 +82,7 @@ class Monolithic_UDL(UserDefinedLogic):
         data = new_batcher.get_data()
         np_pixel_vals = np.copy(data["pixel_values"])
         
-        self.tl.log(40000, int(kwargs["message_id"]), 0, 0)
+        
         
         if self.flmr_model == None:
             self.load_model_cpu()
@@ -118,12 +118,13 @@ class Monolithic_UDL(UserDefinedLogic):
             question_id: question for question_id, question in zip(examples["question_id"], examples["question"])
         } 
         
+        self.tl.log(40000, int(kwargs["message_id"]), 0, 0)
         ranking = search_custom_collection(
             searcher=self.searcher,
             queries= queries,
             query_embeddings=query_embeddings,
             num_document_to_retrieve=5, # how many documents to retrieve for each query
-            centroid_search_batch_size=bsize,
+            centroid_search_batch_size=32,
         )
         
         # print(f'For batch number {int(kwargs["message_id"])} got ranking dictionary: {ranking.todict()}')

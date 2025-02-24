@@ -121,7 +121,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 1
-    num_batches = 100
+    num_batches = 50
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -156,8 +156,8 @@ if __name__ == "__main__":
     
     
     for i in range(0, len(ds), batch_size):
-        idx = torch.randint(0, 555, (1,)).item()
-        batch = ds[idx : idx + batch_size]
+        # idx = torch.randint(0, 555, (1,)).item()
+        batch = ds[i : i + batch_size]
         # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
         if (i // batch_size) >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
