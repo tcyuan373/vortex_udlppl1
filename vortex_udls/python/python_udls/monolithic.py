@@ -82,6 +82,8 @@ class Monolithic_UDL(UserDefinedLogic):
         data = new_batcher.get_data()
         np_pixel_vals = np.copy(data["pixel_values"])
         
+        self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
+        
         if self.flmr_model == None:
             self.load_model_cpu()
             
@@ -125,7 +127,7 @@ class Monolithic_UDL(UserDefinedLogic):
         )
         
         # print(f'For batch number {int(kwargs["message_id"])} got ranking dictionary: {ranking.todict()}')
-        self.tl.log(20000, int(kwargs["message_id"]), 0, 0)
+        self.tl.log(20010, int(kwargs["message_id"]), 0, 0)
         # if int(kwargs["message_id"]) % 5 ==0:
         #     print(f"Now processing batch no.{int(kwargs['message_id'])}")
         #     print(f"Got ranking dict: {ranking.todict()}")
