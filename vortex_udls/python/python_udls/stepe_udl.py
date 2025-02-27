@@ -48,7 +48,7 @@ class StepEUDL(UserDefinedLogic):
         print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.searcher = None
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
-        self.index_experiment_name  = 'EVQA_test_split/'
+        self.index_experiment_name  = 'EVQA_train_split/'
         self.index_name             = 'EVQA_PreFLMR_ViT-L'
         self.collected_intermediate_results = {}
         # self.queries2save = {}
@@ -116,23 +116,7 @@ class StepEUDL(UserDefinedLogic):
         ranking = self.process_search(self.collected_intermediate_results[batch_id]._queries, 
                                       self.collected_intermediate_results[batch_id]._query_embeddings,
                                       bsize)
-        # qembed_dir = "./Qembeds/"
-        # qembeds_save_dir = qembed_dir + "Qembeds.pt"
-        # queries_save_dir = qembed_dir + "queries.pt"
-        # print("==========Begin saving Qembeds and Queries=========")
-        # if not os.path.exists(qembed_dir):
-        #     os.mkdir(qembed_dir)
-        # if os.path.exists(qembeds_save_dir):
-        #     qembeds_to_save = torch.load(qembeds_save_dir)
-        #     qembeds_to_save = torch.stack([qembeds_to_save, torch.Tensor(query_embeddings)], dim=0)
-        #     torch.save(qembeds_to_save, qembeds_save_dir)
-        # if os.path.exists(queries_save_dir):
-        #     queries_to_save = torch.load(queries_save_dir)
-        #     queries_to_save = {**queries_to_save, **queries}
-        #     torch.save(queries_to_save, queries_save_dir)
-        # torch.save(torch.Tensor(query_embeddings), qembeds_save_dir)
-        # torch.save(queries, queries_save_dir)
-        # print("==========Finish saving Qembeds and Queries=========")
+
         # print('==========Finished Searching==========')
         # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
         # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')

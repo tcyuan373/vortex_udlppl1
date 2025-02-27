@@ -10,7 +10,7 @@ from torch import nn
 from flmr import FLMRConfig, FLMRVisionModel
 from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
-
+from serialize_utils import PixelValueBatcher
 
 STEPB_NEXT_UDL_SHARD_INDEX = 2
 
@@ -84,9 +84,10 @@ class StepBUDL(UserDefinedLogic):
         '''
         key = kwargs["key"]
         blob = kwargs["blob"]
-        blob_bytes = blob.tobytes()
-        res_json_str = blob_bytes.decode('utf-8')
-        rec_dict = json.loads(res_json_str)
+        
+        new_batcher = PixelValueBatcher()
+        new_batcher.deserialize(blob)
+        data = new_batcher.get_data()
         
         key_id = key[int(key.find('_'))+1:]
         batch_id = int(key_id)
@@ -105,7 +106,7 @@ class StepBUDL(UserDefinedLogic):
             self.load_model_gpu()
             self.stepc.load_model_gpu()
             
-        input_tensor = torch.Tensor(rec_dict["pixel_values"]).to(self.device)
+        input_tensor = torch.Tensor(data["pixel_values"]).to(self.device)
         # print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
         batch_size = input_tensor.shape[0]
         # Forward the vision encoder
@@ -134,9 +135,6 @@ class StepBUDL(UserDefinedLogic):
         # veres_json_byte = veres_json_str.encode('utf-8')
         # hsres_json_str = json.dumps(hs_result)
         # hsres_json_byte = hsres_json_str.encode('utf-8')
-        
-        
-        
         
         ve = vision_embeddings.detach().cpu().numpy().tobytes()
         hs = transformer_mapping_input_feature.detach().cpu().numpy().tobytes()

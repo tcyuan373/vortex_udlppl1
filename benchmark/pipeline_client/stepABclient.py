@@ -17,7 +17,7 @@ from flmr import (
 )
 from datasets import load_dataset
 import time
-
+from serialize_utils import PixelValueBatcher
 
 
 STEPA_SHARD_INDEX = 3
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 1
+    batch_size = 3
     num_batches = 50
     
     # directories and str configs
@@ -181,7 +181,17 @@ if __name__ == "__main__":
         stepb_json_str = json.dumps(stepb_data2send_dict)
         stepb_byte_data = stepb_json_str.encode('utf-8')
         
-        resB = capi.put(stepb_key, stepb_byte_data,subgroup_type=subgroup_type,
+        print(f"if not serialize, we got message size of :{sys.getsizeof(stepb_byte_data)}")
+        serializer = PixelValueBatcher()
+        serializer.question_ids = np.zeros(batch_size)
+        for i, qid in batch["question_id"]:
+            uds_idx =  int(qid.find("_"))
+            question_id = int(qid[uds_idx+1:])
+            serializer.question_ids[i] = question_id
+        serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
+        print(f"With serializer, we got message size of: {sys.getsizeof(serializer.tobytes())}")
+        
+        resB = capi.put(stepb_key, serializer.tobytes(),subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
         time.sleep(2)
         

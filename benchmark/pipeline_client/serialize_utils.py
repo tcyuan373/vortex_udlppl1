@@ -150,3 +150,95 @@ class DataBatcher:
             "pixel_values": self.pixel_values,
             "text_sequence": self.text_sequence
         }
+        
+        
+class PixelValueBatcher:
+    def __init__(self):
+        # Expected shape: (batch_size, 1, 3, 224, 224) and dtype=np.float32.
+        self.pixel_values: np.ndarray = None
+        # Query IDs as a NumPy array of shape (batch_size,) and dtype=np.int64.
+        self.question_ids: np.ndarray = None
+        # Internal buffer (serialized data)
+        self._bytes: np.ndarray = None
+
+    def serialize(self) -> np.ndarray:
+        """
+        Serialize the pixel_values and question_ids into a contiguous buffer.
+        Layout:
+        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
+        """
+        if self.pixel_values is None or self.question_ids is None:
+            raise ValueError("Both pixel_values and question_ids must be provided.")
+        
+        # Ensure question_ids is a NumPy array.
+        question_ids_array = np.asarray(self.question_ids, dtype=np.int64)
+        batch_size = question_ids_array.shape[0]
+        
+        if self.pixel_values.shape[0] != batch_size:
+            raise ValueError("The first dimension of pixel_values must match the number of question_ids.")
+        
+        # Calculate sizes.
+        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
+        question_ids_size = question_ids_array.nbytes       # batch_size * 8 bytes
+        pixel_values_size = self.pixel_values.nbytes  # batch_size * 1 * 3 * 224 * 224 * 4
+        
+        total_size = header_size + question_ids_size + pixel_values_size
+        # Allocate one contiguous buffer.
+        buffer = np.empty(total_size, dtype=np.uint8)
+        offset = 0
+
+        # --- Write header: batch_size ---
+        header_arr = np.array([batch_size], dtype=np.uint32)
+        # Create a view into header_arr as uint8 (zero-copy view) and copy into the buffer slice.
+        buffer[offset:offset + header_size] = header_arr.view(np.uint8)
+        offset += header_size
+
+        # --- Write question_ids ---
+        # Use a view of the question_ids array as uint8.
+        buffer[offset:offset + question_ids_size] = question_ids_array.view(np.uint8)
+        offset += question_ids_size
+
+        # --- Write pixel_values ---
+        buffer[offset:offset + pixel_values_size] = self.pixel_values.view(np.uint8).reshape(-1)
+        offset += pixel_values_size
+
+        self._bytes = buffer
+        return buffer
+
+    def deserialize(self, data: np.ndarray):
+        """
+        Deserialize a contiguous uint8 buffer into question_ids and pixel_values with zero-copy.
+        The layout of the buffer is:
+        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
+        where pixel_values is expected to have shape (batch_size, 1, 3, 224, 224).
+        """
+        self._bytes = data
+        buffer = data
+        offset = 0
+
+        # --- Read header: batch_size ---
+        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
+        batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
+        offset += header_size
+
+        # --- Read question_ids ---
+        question_ids_count = batch_size  # one int64 per example
+        question_ids = np.frombuffer(buffer, dtype=np.int64, count=question_ids_count, offset=offset)
+        offset += question_ids.nbytes  # or batch_size * np.dtype(np.int64).itemsize
+
+        # --- Read pixel_values ---
+        pixel_shape = (batch_size, 1, 3, 224, 224)
+        num_pixels = np.prod(pixel_shape)
+        # Create a zero-copy view and then reshape it
+        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=num_pixels, offset=offset).reshape(pixel_shape)
+        offset += num_pixels * np.dtype(np.float32).itemsize
+
+        # Assign fields (these are zero-copy views into the original buffer)
+        self.question_ids = question_ids
+        self.pixel_values = pixel_values
+
+    def get_data(self):
+        return {
+            "question_ids": self.question_ids,
+            "pixel_values": self.pixel_values
+        }
