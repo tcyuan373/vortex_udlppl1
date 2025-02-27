@@ -259,7 +259,7 @@ class StepDUDL(UserDefinedLogic):
                                     cur_batch._transformer_mapping_input_feature,
                                         )
         
-        # print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
+        print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
 
         self.tl.log(30011, batch_id, 0, 0)
         # self.collected_intermediate_results.erase(batch_id)

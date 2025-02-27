@@ -121,7 +121,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 1
-    num_batches = 1
+    num_batches = 50
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -178,13 +178,8 @@ if __name__ == "__main__":
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
         
 
-        stepb_data2send_keys = ["pixel_values"]
-        stepb_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) else batch[k] for k in stepb_data2send_keys if k in batch}
+
         stepb_key = stepb_prefix + f"_{i}"
-        stepb_json_str = json.dumps(stepb_data2send_dict)
-        stepb_byte_data = stepb_json_str.encode('utf-8')
-        
-        print(f"if not serialize, we got message size of :{sys.getsizeof(stepb_byte_data)}")
         serializer = PixelValueBatcher()
         serializer.question_ids = np.zeros(batch_size)
         for i, qid in enumerate(batch["question_id"]):
@@ -193,7 +188,7 @@ if __name__ == "__main__":
             serializer.question_ids[i] = question_id
         serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
         serialized_np = serializer.serialize()
-        print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
+        # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
         resB = capi.put(stepb_key, serialized_np.tobytes(),subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
         time.sleep(2)
