@@ -75,7 +75,7 @@ class StepEUDL(UserDefinedLogic):
             queries=queries,
             query_embeddings=torch.Tensor(query_embeddings),
             num_document_to_retrieve=5, # how many documents to retrieve for each query
-            centroid_search_batch_size=32,
+            centroid_search_batch_size=bsize,
         )
         
         
@@ -107,20 +107,23 @@ class StepEUDL(UserDefinedLogic):
         uds_idx = key.find("_")
         batch_id = int(key[uds_idx+1:])
         
+        
         self.tl.log(40000, batch_id, 0, 0)
-        if not self.collected_intermediate_results.get(batch_id):
-            self.collected_intermediate_results[batch_id] = IntermediateResult()
+        ranking = self.process_search(queries, query_embeddings, bsize)
+        
+        # if not self.collected_intermediate_results.get(batch_id):
+        #     self.collected_intermediate_results[batch_id] = IntermediateResult()
             
-        if step_D_idx != -1:
-            self.collected_intermediate_results[batch_id]._queries = queries
-            self.collected_intermediate_results[batch_id]._query_embeddings = query_embeddings
+        # if step_D_idx != -1:
+        #     self.collected_intermediate_results[batch_id]._queries = queries
+        #     self.collected_intermediate_results[batch_id]._query_embeddings = query_embeddings
             
-        if not self.collected_intermediate_results[batch_id].has_all():
-            return
+        # if not self.collected_intermediate_results[batch_id].has_all():
+        #     return
             
-        ranking = self.process_search(self.collected_intermediate_results[batch_id]._queries, 
-                                      self.collected_intermediate_results[batch_id]._query_embeddings,
-                                      bsize)
+        # ranking = self.process_search(self.collected_intermediate_results[batch_id]._queries, 
+        #                               self.collected_intermediate_results[batch_id]._query_embeddings,
+        #                               bsize)
 
         # print('==========Finished Searching==========')
         # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
@@ -128,7 +131,7 @@ class StepEUDL(UserDefinedLogic):
         self.tl.log(40100, batch_id, 0, 0)
         
         # erase the batch id dict{} 
-        del self.collected_intermediate_results[batch_id]
+        # del self.collected_intermediate_results[batch_id]
         if batch_id == 49:
             self.tl.flush(f"node{self.my_id}_STEPE_udls_timestamp.dat")
             print("Time Log Flushed!!!")
