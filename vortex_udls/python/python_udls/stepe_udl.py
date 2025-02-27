@@ -23,7 +23,7 @@ from flmr import (
 import functools
 import tqdm
 import tqdm
-
+from serialize_utils import StepDMessageBatcher
 
 class IntermediateResult:
     def __init__(self):
@@ -85,9 +85,14 @@ class StepEUDL(UserDefinedLogic):
     def ocdpo_handler(self,**kwargs):
         key                 = kwargs["key"]
         blob                = kwargs["blob"]
-        bytes_obj           = blob.tobytes()
-        json_str_decoded    = bytes_obj.decode('utf-8')
-        cluster_result      = json.loads(json_str_decoded)
+        
+        new_batcher = StepDMessageBatcher()
+        new_batcher.deserialize(blob)
+        cluster_result = new_batcher.get_data()
+        
+        # bytes_obj           = blob.tobytes()
+        # json_str_decoded    = bytes_obj.decode('utf-8')
+        # cluster_result      = json.loads(json_str_decoded)
         queries_texts       = cluster_result['queries']
         query_embeddings    = cluster_result['query_embeddings']
         question_ids        = cluster_result['question_id']

@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer
-
+from serialize_utils import StepDMessageBatcher, StepAMessageDataBatcher, VisionDataBatcher
 
 STEPD_NEXT_UDL_SHARD_INDEX = 0
 
@@ -215,8 +215,7 @@ class StepDUDL(UserDefinedLogic):
         blob = kwargs["blob"]
         
         step_A_idx = key.find("stepA") 
-        step_Bve_idx = key.find("stepBve")
-        step_Bhs_idx = key.find("stepBhs")
+        step_B_idx = key.find("stepB")
         
         # print(f'Step D UDL got key: {key}')
         
@@ -227,26 +226,23 @@ class StepDUDL(UserDefinedLogic):
             self.collected_intermediate_results[batch_id] = IntermediateResult()
         if step_A_idx != -1:
             self.tl.log(30000, batch_id, 1, 0)
-            blob_bytes = blob.tobytes()
-            res_json_str = blob_bytes.decode('utf-8')
-            blob_data = json.loads(res_json_str)
-            
-            
-            self.collected_intermediate_results[batch_id]._question_id = blob_data['question_id']
+
+            stepa_serializer = StepAMessageDataBatcher()
+            stepa_serializer.deserialize(blob)
+            blob_data = stepa_serializer.get_data()
+            self.collected_intermediate_results[batch_id]._question_id = blob_data['question_ids']
             self.collected_intermediate_results[batch_id]._queries = blob_data['queries']
             self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(blob_data["input_ids"])
-            self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeddings'])
+            self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeds'])
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             
-        elif step_Bve_idx != -1:
+        elif step_B_idx != -1:
             self.tl.log(30000, batch_id, 2, 0)
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 32, 128)
-            self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(reconstructed_np)
-            
-        elif step_Bhs_idx != -1:
-            self.tl.log(30000, batch_id, 3, 0)
-            reconstructed_np = np.frombuffer(blob, dtype=np.float32).reshape(-1, 256, 768)
-            self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(reconstructed_np)
+            stepb_batcher = VisionDataBatcher()
+            stepb_batcher.deserialize(blob)
+            blob_data = stepa_serializer.get_data()
+            self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(blob_data["vision_embedding"])
+            self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(blob_data["vision_hidden_states"])
             
         if not self.collected_intermediate_results[batch_id].collected_all():
             return
@@ -267,16 +263,23 @@ class StepDUDL(UserDefinedLogic):
         self.tl.log(30011, batch_id, 0, 0)
         # self.collected_intermediate_results.erase(batch_id)
         
-        result = {}
-        result['queries'] = self.collected_intermediate_results[batch_id]._queries
-        result['query_embeddings'] = batch_query_embeddings.tolist()
-        result['question_id'] = self.collected_intermediate_results[batch_id]._question_id
-        res_json_str = json.dumps(result)
-        res_json_byte = res_json_str.encode('utf-8')
+        # result = {}
+        # result['queries'] = self.collected_intermediate_results[batch_id]._queries
+        # result['query_embeddings'] = batch_query_embeddings.tolist()
+        # result['question_id'] = self.collected_intermediate_results[batch_id]._question_id
+        # res_json_str = json.dumps(result)
+        # res_json_byte = res_json_str.encode('utf-8')
+        
+        stepd_batcher = StepDMessageBatcher()
+        stepd_batcher.queries = self.collected_intermediate_results[batch_id]._queries
+        stepd_batcher.query_embeddings = batch_query_embeddings.cpu().detach().numpy()
+        stepd_batcher.question_ids = self.collected_intermediate_results[batch_id]._question_id
+        stepd_batcher_np = stepd_batcher.serialize()
+        
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         
-        res = self.capi.put(f"/stepE/stepD_{batch_id}", res_json_byte, subgroup_type=subgroup_type,
+        res = self.capi.put(f"/stepE/stepD_{batch_id}", stepd_batcher_np.tobytes(), subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
 
         self.tl.log(30020, batch_id, 0, 0)

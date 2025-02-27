@@ -14,7 +14,7 @@ from flmr import (
     FLMRQueryEncoderTokenizer,
 )
 from datasets import load_dataset
-from serialize_utils import DataBatcher
+from serialize_utils import MonoDataBatcher
 
 MONO_SHARD_ID = 0
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
-        batcher = DataBatcher()
+        batcher = MonoDataBatcher()
         
         # print(f"Got qid list : {batch['question_id']}")
         for qid in batch["question_id"]:

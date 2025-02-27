@@ -17,7 +17,7 @@ from flmr import (
 )
 from datasets import load_dataset
 import time
-from serialize_utils import PixelValueBatcher
+from serialize_utils import PixelValueBatcher, TextDataBatcher
 
 
 STEPA_SHARD_INDEX = 3
@@ -120,8 +120,8 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 3
-    num_batches = 50
+    batch_size = 1
+    num_batches = 1
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -152,9 +152,6 @@ if __name__ == "__main__":
         num_proc=16,
     )
     
-    # slice the ds so that we split the input are
-    
-    
     for i in range(0, len(ds), batch_size):
         # idx = torch.randint(0, 555, (1,)).item()
         batch = ds[i : i + batch_size]
@@ -164,14 +161,20 @@ if __name__ == "__main__":
             break
         
         # print(f"Check for input ids: {torch.LongTensor(batch['input_ids']).shape} | \n attention_mask: {torch.Tensor(batch['attention_mask']).shape}")
+        stepa_serializer = TextDataBatcher()
+        
+        for i, qid in enumerate(batch["question_id"]):
+            uds_idx =  int(qid.find("_"))
+            question_id = int(qid[uds_idx+1:])
+            stepa_serializer.question_ids.append(question_id)
             
-        stepa_data2send_keys = ["question_id", "text_sequence", "input_ids", "attention_mask"]
-        stepa_data2send_dict = {k: batch[k].numpy() if isinstance(batch[k], torch.Tensor) or isinstance(batch[k], torch.LongTensor) else batch[k] for k in stepa_data2send_keys if k in batch}
+        stepa_serializer.text_sequence = batch["text_sequence"]
+        stepa_serializer.input_ids = batch["input_ids"]
+        stepa_serializer.attention_mask = batch["attention_mask"]
+        stepa_serialized_np = stepa_serializer.serialize()
         stepa_key = stepa_prefix + f"_{i}"
-        stepa_json_str = json.dumps(stepa_data2send_dict)
-        stepa_byte_data = stepa_json_str.encode('utf-8')
         tl.log(10000 ,i ,0 ,0 )
-        resA = capi.put(stepa_key, stepa_byte_data,subgroup_type=subgroup_type,
+        resA = capi.put(stepa_key, stepa_serialized_np.tobytes(),subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
         
 
@@ -184,14 +187,14 @@ if __name__ == "__main__":
         print(f"if not serialize, we got message size of :{sys.getsizeof(stepb_byte_data)}")
         serializer = PixelValueBatcher()
         serializer.question_ids = np.zeros(batch_size)
-        for i, qid in batch["question_id"]:
+        for i, qid in enumerate(batch["question_id"]):
             uds_idx =  int(qid.find("_"))
             question_id = int(qid[uds_idx+1:])
             serializer.question_ids[i] = question_id
         serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-        print(f"With serializer, we got message size of: {sys.getsizeof(serializer.tobytes())}")
-        
-        resB = capi.put(stepb_key, serializer.tobytes(),subgroup_type=subgroup_type,
+        serialized_np = serializer.serialize()
+        print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
+        resB = capi.put(stepb_key, serialized_np.tobytes(),subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
         time.sleep(2)
         

@@ -11,6 +11,8 @@ from flmr import FLMRConfig, FLMRVisionModel
 from transformers import AutoImageProcessor
 from step_C_modeling_mlp import StepC
 from serialize_utils import PixelValueBatcher
+from serialize_utils import VisionDataBatcher
+
 
 STEPB_NEXT_UDL_SHARD_INDEX = 2
 
@@ -135,28 +137,31 @@ class StepBUDL(UserDefinedLogic):
         # veres_json_byte = veres_json_str.encode('utf-8')
         # hsres_json_str = json.dumps(hs_result)
         # hsres_json_byte = hsres_json_str.encode('utf-8')
+        stepb_batcher = VisionDataBatcher()
         
-        ve = vision_embeddings.detach().cpu().numpy().tobytes()
-        hs = transformer_mapping_input_feature.detach().cpu().numpy().tobytes()
+        ve = vision_embeddings.detach().cpu().numpy()
+        hs = transformer_mapping_input_feature.detach().cpu().numpy()
+        stepb_batcher.vision_embedding = ve
+        stepb_batcher.vision_hidden_states = hs
+        stepb_batcher.question_id = data["question_ids"]
+        stepb_bacher_np = stepb_batcher.serialize()
         
-        
-        ve_prefix = "/stepD/stepBve_"
-        hs_prefix = "/stepD/stepBhs_"
+        prefix = "/stepD/stepB_"
+
         # indices = [i for i, char in enumerate(key) if char == "/"]
         # key_id = key[int(indices[-1]):]
         
-        ve_key = ve_prefix + key_id
-        hs_key = hs_prefix + key_id
+        key = prefix + key_id
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         
-        resve = self.capi.put(ve_key,ve,subgroup_type=subgroup_type,
+        resve = self.capi.put(key,stepb_bacher_np.tobytes(),subgroup_type=subgroup_type,
                       subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
                       message_id=1, as_trigger=True, blocking=False)
         
-        reshs = self.capi.put(hs_key,hs,subgroup_type=subgroup_type,
-                      subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
-                      message_id=1, as_trigger=True, blocking=False)
+        # reshs = self.capi.put(hs_key,hs,subgroup_type=subgroup_type,
+        #               subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
+        #               message_id=1, as_trigger=True, blocking=False)
         self.tl.log(20100, batch_id, 0, 0)
         
         if batch_id == 49:

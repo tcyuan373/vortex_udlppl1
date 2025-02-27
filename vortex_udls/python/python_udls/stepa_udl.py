@@ -13,7 +13,7 @@ import os
 import torch
 from torch import Tensor, nn
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
-
+from serialize_utils import TextDataBatcher, StepAMessageDataBatcher
 
 STEPA_NEXT_UDL_SHARD_INDEX = 2
 
@@ -98,9 +98,13 @@ class StepAUDL(UserDefinedLogic):
         '''
         key = kwargs['key']
         blob = kwargs["blob"]
-        blob_bytes = blob.tobytes()
-        res_json_str = blob_bytes.decode('utf-8')
-        encoded_inputs = json.loads(res_json_str)
+        
+        new_batcher = TextDataBatcher()
+        new_batcher.deserialize(blob)
+        encoded_inputs = new_batcher.get_data()
+        # blob_bytes = blob.tobytes()
+        # res_json_str = blob_bytes.decode('utf-8')
+        # encoded_inputs = json.loads(res_json_str)
         
         
         key_id = key[int(key.find('_'))+1:]
@@ -121,15 +125,23 @@ class StepAUDL(UserDefinedLogic):
         # print(f'text embedding of shape: \t {text_embeddings.shape}')
         # print(f'input ids of shape: \t\t {text_embeddings.shape}')
         # print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
-        result = {}
-        result['queries'] = encoded_inputs["text_sequence"]
-        result['question_id'] = encoded_inputs["question_id"]
-        result['input_ids'] = input_ids.tolist()
-        result['text_embeddings'] = text_embeddings.tolist()
-        result['text_encoder_hidden_states'] = text_encoder_hidden_states.tolist()
-        res_json_str = json.dumps(result)
-        res_json_byte = res_json_str.encode('utf-8')
-        # capi.put("/stepD/stepA_1", res_json_byte)
+        # result = {}
+        # result['queries'] = encoded_inputs["text_sequence"]
+        # result['question_id'] = encoded_inputs["question_ids"]
+        # result['input_ids'] = input_ids.tolist()
+        # result['text_embeddings'] = text_embeddings.tolist()
+        # result['text_encoder_hidden_states'] = text_encoder_hidden_states.tolist()
+        # res_json_str = json.dumps(result)
+        # res_json_byte = res_json_str.encode('utf-8')
+        
+        stepa_serializer = StepAMessageDataBatcher()
+        stepa_serializer.queries = encoded_inputs["text_sequence"]
+        stepa_serializer.question_ids = encoded_inputs["question_ids"]
+        stepa_serializer.input_ids = input_ids.cpu().detach().numpy()
+        stepa_serializer.text_embeds = text_embeddings.cpu().detach().numpy()
+        stepa_serializer.text_encoder_hidden_states = text_encoder_hidden_states.cpu().detach().numpy()
+        
+        stepa_serialized_np = stepa_serializer.serialize()
         subgroup_type = "VolatileCascadeStoreWithStringKey"
         subgroup_index = 0
         prefix = "/stepD/stepA_"
@@ -138,7 +150,7 @@ class StepAUDL(UserDefinedLogic):
         # key_id = key[int(indices[-1]):]
         
         new_key =  prefix + key_id
-        res = self.capi.put(new_key, res_json_byte, subgroup_type=subgroup_type,
+        res = self.capi.put(new_key, stepa_serialized_np.tobytes(), subgroup_type=subgroup_type,
                 subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
         self.tl.log(20050, batch_id, 0, 0)
         if batch_id==49:
