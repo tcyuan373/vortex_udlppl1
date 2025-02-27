@@ -153,17 +153,18 @@ if __name__ == "__main__":
     )
     
     for i in range(0, len(ds), batch_size):
-        # idx = torch.randint(0, 555, (1,)).item()
-        batch = ds[i : i + batch_size]
+        idx = torch.randint(0, 555, (1,)).item()
+        batch = ds[idx : idx + batch_size]
+        batch_idx = i // batch_size
         # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
-        if (i // batch_size) >= num_batches:    
+        if batch_idx >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
         # print(f"Check for input ids: {torch.LongTensor(batch['input_ids']).shape} | \n attention_mask: {torch.Tensor(batch['attention_mask']).shape}")
         stepa_serializer = TextDataBatcher()
         
-        for i, qid in enumerate(batch["question_id"]):
+        for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
             question_id = int(qid[uds_idx+1:])
             stepa_serializer.question_ids.append(question_id)
@@ -172,14 +173,14 @@ if __name__ == "__main__":
         stepa_serializer.input_ids = np.asarray(batch["input_ids"])
         stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()
-        stepa_key = stepa_prefix + f"_{i}"
-        tl.log(10000 ,i ,0 ,0 )
+        stepa_key = stepa_prefix + f"_{batch_idx}"
+        tl.log(10000 ,batch_idx ,0 ,0 )
         resA = capi.put(stepa_key, stepa_serialized_np.tobytes(),subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
         
 
 
-        stepb_key = stepb_prefix + f"_{i}"
+        stepb_key = stepb_prefix + f"_{batch_idx}"
         serializer = PixelValueBatcher()
         serializer.question_ids = np.zeros(batch_size)
         for i, qid in enumerate(batch["question_id"]):
