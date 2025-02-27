@@ -4,7 +4,7 @@ import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
-
+import numpy as np
 import torch
 from torch import nn
 from flmr import FLMRConfig, FLMRVisionModel
@@ -91,6 +91,7 @@ class StepBUDL(UserDefinedLogic):
         new_batcher.deserialize(blob)
         data = new_batcher.get_data()
         
+        pv_np = np.copy(data["pixel_values"])
         key_id = key[int(key.find('_'))+1:]
         batch_id = int(key_id)
         self.tl.log(20051, batch_id, 0, 0)
@@ -108,7 +109,7 @@ class StepBUDL(UserDefinedLogic):
             self.load_model_gpu()
             self.stepc.load_model_gpu()
             
-        input_tensor = torch.Tensor(data["pixel_values"]).to(self.device)
+        input_tensor = torch.Tensor(pv_np).to(self.device)
         # print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
         batch_size = input_tensor.shape[0]
         # Forward the vision encoder

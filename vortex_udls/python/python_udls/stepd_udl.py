@@ -241,7 +241,7 @@ class StepDUDL(UserDefinedLogic):
             self.tl.log(30000, batch_id, 2, 0)
             stepb_batcher = VisionDataBatcher()
             stepb_batcher.deserialize(blob)
-            blob_data = stepa_serializer.get_data()
+            blob_data = stepb_batcher.get_data()
             self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(blob_data["vision_embedding"])
             self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(blob_data["vision_hidden_states"])
             
