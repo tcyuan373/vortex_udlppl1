@@ -230,9 +230,10 @@ class StepDUDL(UserDefinedLogic):
             stepa_serializer = StepAMessageDataBatcher()
             stepa_serializer.deserialize(blob)
             blob_data = stepa_serializer.get_data()
+            input_ids_np = np.copy(blob_data["input_ids"])
             self.collected_intermediate_results[batch_id]._question_id = blob_data['question_ids']
             self.collected_intermediate_results[batch_id]._queries = blob_data['queries']
-            self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(blob_data["input_ids"])
+            self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(input_ids_np)
             self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeds'])
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
             

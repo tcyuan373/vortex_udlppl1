@@ -143,7 +143,7 @@ class StepBUDL(UserDefinedLogic):
         hs = transformer_mapping_input_feature.detach().cpu().numpy()
         stepb_batcher.vision_embedding = ve
         stepb_batcher.vision_hidden_states = hs
-        stepb_batcher.question_id = data["question_ids"]
+        stepb_batcher.question_id = data["question_ids"].tolist()
         stepb_bacher_np = stepb_batcher.serialize()
         
         prefix = "/stepD/stepB_"

@@ -14,7 +14,7 @@ from flmr import (
     FLMRConfig,
 )
 from flmr import create_searcher, search_custom_collection
-from serialize_utils import DataBatcher
+from serialize_utils import MonoDataBatcher
 
 
 class Monolithic_UDL(UserDefinedLogic):
@@ -77,7 +77,7 @@ class Monolithic_UDL(UserDefinedLogic):
         blob                = kwargs["blob"]
         # bytes_obj           = blob.view(dtype=np.uint8)
         # json_str_decoded    = bytes_obj.decode('utf-8')
-        new_batcher = DataBatcher()
+        new_batcher = MonoDataBatcher()
         new_batcher.deserialize(blob)
         data = new_batcher.get_data()
         np_pixel_vals = np.copy(data["pixel_values"])

@@ -169,8 +169,8 @@ if __name__ == "__main__":
             stepa_serializer.question_ids.append(question_id)
             
         stepa_serializer.text_sequence = batch["text_sequence"]
-        stepa_serializer.input_ids = batch["input_ids"]
-        stepa_serializer.attention_mask = batch["attention_mask"]
+        stepa_serializer.input_ids = np.asarray(batch["input_ids"])
+        stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()
         stepa_key = stepa_prefix + f"_{i}"
         tl.log(10000 ,i ,0 ,0 )

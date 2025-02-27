@@ -95,7 +95,7 @@ class StepEUDL(UserDefinedLogic):
         # cluster_result      = json.loads(json_str_decoded)
         queries_texts       = cluster_result['queries']
         query_embeddings    = cluster_result['query_embeddings']
-        question_ids        = cluster_result['question_id']
+        question_ids        = cluster_result['question_ids']
         bsize               = 32
         
         

@@ -105,7 +105,7 @@ class StepAUDL(UserDefinedLogic):
         # blob_bytes = blob.tobytes()
         # res_json_str = blob_bytes.decode('utf-8')
         # encoded_inputs = json.loads(res_json_str)
-        
+        input_ids_np = np.copy(encoded_inputs['input_ids'])
         
         key_id = key[int(key.find('_'))+1:]
         batch_id = int(key_id)
@@ -115,7 +115,7 @@ class StepAUDL(UserDefinedLogic):
             self.load_model_cpu()
             self.load_model_gpu()
         # encoded_inputs      = self.query_tokenizer(string_list)
-        input_ids           = torch.LongTensor(encoded_inputs['input_ids']).to(self.device)
+        input_ids           = torch.LongTensor(input_ids_np).to(self.device)
         attention_mask      = torch.Tensor(encoded_inputs['attention_mask']).to(self.device)
         # print(f"STEP A Got input ids of shape: {input_ids.shape} | attn_mask of shape: {attention_mask.shape}")
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
