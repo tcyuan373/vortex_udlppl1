@@ -1,4 +1,5 @@
 import numpy as np
+import ctypes
 
 class MonoDataBatcher:
     def __init__(self):
@@ -251,7 +252,7 @@ class TextDataBatcher:
         self.text_sequence = []     # List[str] of length batch_size.
         self.input_ids = None       # np.ndarray of shape (batch_size, 32), dtype=np.int64.
         self.attention_mask = None  # np.ndarray of shape (batch_size, 32), dtype=np.int64.
-        self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        self._bytes: np.ndarray = np.array([], dtype=np.uint8)'
 
     def utf8_length(self, s: str) -> int:
         """Return the byte-length of s when encoded in UTF-8."""
@@ -419,7 +420,45 @@ class TextDataBatcher:
             "attention_mask": self.attention_mask
         }
         
+
+
+class PendingTextDataBatcher():
+    '''
+    Super batch of TextDataBatcher
+    '''
+    def __init__(self, batch_size: int):
+        self.max_batch_size = batch_size
+        self.num_pending = 0
+        # TODO: when using GPU RDMA direct, below fields should be allocated in CUDA memory
+        self.question_ids = []      # List[int] of length batch_size.
+        self.text_sequence = []     # List[str] of length batch_size.
+        self.input_ids = np.empty((self.max_batch_size, 32), dtype=np.int64)
+        self.attention_mask = np.empty((self.max_batch_size, 32), dtype=np.int64)
+
+    def space_left(self):
+        return self.max_batch_size - self.num_pending
+    
+    def add(self, TextDataBatcher, start_pos):
+        num_to_add = min(self.space_left(), len(TextDataBatcher.question_ids) - start_pos)
+        end_pos = start_pos + num_to_add
+        self.question_ids.extend(TextDataBatcher.question_ids[start_pos:end_pos])
+        self.text_sequence.extend(TextDataBatcher.text_sequence[start_pos:end_pos])
+        pending_end_pos = self.num_pending + num_to_add
+        self.input_ids[self.num_pending:pending_end_pos] = TextDataBatcher.input_ids[start_pos:end_pos]
+        self.attention_mask[self.num_pending:pending_end_pos] = TextDataBatcher.attention_mask[start_pos:end_pos]
+        self.num_pending = pending_end_pos
+        return end_pos
         
+
+    def reset(self):
+        self.question_ids.clear()
+        self.text_sequence.clear()
+        self.input_ids.fill(0)
+        self.attention_mask.fill(0)
+        self.num_pending = 0
+        
+
+    
         
 class StepAMessageDataBatcher:
     def __init__(self):
@@ -878,21 +917,31 @@ class VisionDataBatcher:
 
 # === Example usage ===
 if __name__ == "__main__":
-    batch_size = 2
-    # Create dummy arrays.
-    dummy_vision_embedding = np.random.rand(batch_size, 32, 128).astype(np.float32)
-    dummy_vision_hidden_states = np.random.rand(batch_size, 256, 768).astype(np.float32)
-    
-    batcher = VisionDataBatcher()
-    batcher.vision_embedding = dummy_vision_embedding
-    batcher.vision_hidden_states = dummy_vision_hidden_states
-    
-    serialized = batcher.serialize()
-    print("Serialized buffer size:", serialized.nbytes)
-    
-    new_batcher = VisionDataBatcher()
-    new_batcher.deserialize(serialized)
-    data = new_batcher.get_data()
-    print("Deserialized vision_embedding shape:", data["vision_embedding"].shape)
-    print("Deserialized vision_hidden_states shape:", data["vision_hidden_states"].shape)
+    test_list = []
+    b1 = PendingTextDataBatcher(100)
+    b1.question_ids = [1, 2, 3]
+    b1.text_sequence = ["hello", "world", "test"]
+    b1.input_ids = np.zeros((3, 32), dtype=np.int64)
+    b1.attention_mask = np.ones((3, 32), dtype=np.int64)
+    test_list.append(b1)
+    # print memory address of text_list[0]'s input_ids
+    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    print(f"addr of text_list : {id(test_list)}")
+    b2 = PendingTextDataBatcher(100)
+    b2.question_ids = [4, 5]
+    b2.text_sequence = ["hello", "world"]
+    b2.input_ids = np.zeros((2, 32), dtype=np.int64)
+    b2.attention_mask = np.ones((2, 32), dtype=np.int64)
+    test_list.append(b2)
+    # print memory address of text_list[0]'s input_ids
+    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    for i in range(100000):
+        temp_b = PendingTextDataBatcher(100)
+        temp_b.question_ids = [i]
+        temp_b.text_sequence = ["hello"]
+        temp_b.input_ids = np.zeros((1, 32), dtype=np.int64)
+        temp_b.attention_mask = np.ones((1, 32), dtype=np.int64)
+        test_list.append(temp_b)
+    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    print(f"addr of text_list : {id(test_list)}")
 
