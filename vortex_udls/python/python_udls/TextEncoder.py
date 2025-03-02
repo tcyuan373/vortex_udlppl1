@@ -15,6 +15,7 @@ class TextEncoder:
         self.query_text_encoder_linear  = None
         self.device                     = 'cpu'
         self.skiplist                   = []
+        
     
     def load_model_cpu(self):
         self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
@@ -54,6 +55,9 @@ class TextEncoder:
         if self.query_text_encoder_linear == None:
             self.load_model_cpu()
             self.load_model_gpu()
+        input_ids = torch.LongTensor(input_ids).to(self.device)
+        attention_mask = torch.LongTensor(attention_mask).to(self.device)
+        print(f"input_id shape: {input_ids.shape} | attention_mask shape: {attention_mask.shape}")
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
         text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)

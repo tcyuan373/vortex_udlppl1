@@ -11,7 +11,7 @@ from serialize_utils import TextDataBatcher, StepAMessageDataBatcher, PendingTex
 from TextEncoder import TextEncoder
 
 STEPA_NEXT_UDL_SHARD_INDEX = 2
-
+STEPA_WORKER_INITIAL_PENDING_BATCHES = 10
 
 
 class StepAModelWorker(threading.Thread):
@@ -21,8 +21,8 @@ class StepAModelWorker(threading.Thread):
     def __init__(self, max_batch_size = 10, batch_time_us=10000):
         super().__init__()
         self.text_encoder = TextEncoder()
+        self.pending_batches = [PendingTextDataBatcher(max_batch_size) for _ in range(STEPA_WORKER_INITIAL_PENDING_BATCHES)]
         
-        self.pending_batches = []  # List of PendingTextDataBatcher
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
         self.next_to_process = 0  
@@ -66,14 +66,15 @@ class StepAModelWorker(threading.Thread):
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                         
             self.cv.notify()
+            print("added to queue")
+            
 
-    def main(self):
+    def run(self):
         batch = None
         while self.running:
-            batch.reset()
-            
+            if not batch is None:
+                batch.reset()
             with self.cv:
-                
                 self.current_batch = -1
                 if self.pending_batches[self.next_to_process].num_pending == 0:
                     self.cv.wait(timeout=self.batch_time_us/1000000)
@@ -85,14 +86,14 @@ class StepAModelWorker(threading.Thread):
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
-
+                    print("found something to process")
             if not self.running:
                 break
             if self.current_batch == -1:
                 continue
-            
+            print("about to execute")
             # Execute the batch
-            text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(batch.input_ids, batch.attention_mask)
+            text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(batch.input_ids[:batch.num_pending], batch.attention_mask[:batch.num_pending])
             
             # push to the batching thread
             # stepa_serializer = StepAMessageDataBatcher()
@@ -139,6 +140,7 @@ class StepAUDL(UserDefinedLogic):
         # )
         self.model_worker.start()
         # self.emit_worker.start()
+        
         
     
         

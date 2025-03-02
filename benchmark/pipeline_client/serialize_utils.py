@@ -252,7 +252,7 @@ class TextDataBatcher:
         self.text_sequence = []     # List[str] of length batch_size.
         self.input_ids = None       # np.ndarray of shape (batch_size, 32), dtype=np.int64.
         self.attention_mask = None  # np.ndarray of shape (batch_size, 32), dtype=np.int64.
-        self._bytes: np.ndarray = np.array([], dtype=np.uint8)'
+        self._bytes: np.ndarray = np.array([], dtype=np.uint8)
 
     def utf8_length(self, s: str) -> int:
         """Return the byte-length of s when encoded in UTF-8."""
@@ -438,7 +438,7 @@ class PendingTextDataBatcher():
     def space_left(self):
         return self.max_batch_size - self.num_pending
     
-    def add(self, TextDataBatcher, start_pos):
+    def add_data(self, TextDataBatcher, start_pos):
         num_to_add = min(self.space_left(), len(TextDataBatcher.question_ids) - start_pos)
         end_pos = start_pos + num_to_add
         self.question_ids.extend(TextDataBatcher.question_ids[start_pos:end_pos])
@@ -448,7 +448,6 @@ class PendingTextDataBatcher():
         self.attention_mask[self.num_pending:pending_end_pos] = TextDataBatcher.attention_mask[start_pos:end_pos]
         self.num_pending = pending_end_pos
         return end_pos
-        
 
     def reset(self):
         self.question_ids.clear()
