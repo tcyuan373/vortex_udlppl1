@@ -262,7 +262,12 @@ public:
             while (alive) {
                 /* 10.1 pick the requests */
                 std::unique_lock req_lock(python_request_mutex);
+                /*** https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
+                    GIL needs to be explicitly release. Otherwise, the c api is holding the GIL, even when no req is being processed.
+                 */
+                Py_BEGIN_ALLOW_THREADS
                 python_request_cv.wait(req_lock,[&]{return !python_request_queue.empty();});
+                Py_END_ALLOW_THREADS
                 std::queue<python_request_t> todo_list;
                 python_request_queue.swap(todo_list);
                 req_lock.unlock();

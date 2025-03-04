@@ -1,46 +1,234 @@
 #!/usr/bin/env python3
-import numpy as np
-import json
-import re
-import struct
 import warnings
-import cascade_context
+warnings.filterwarnings("ignore")
+import json
+import threading
+import torch
+from torch import Tensor
+
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
 
-import os
-import torch
-from torch import Tensor, nn
-from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
-from serialize_utils import TextDataBatcher, StepAMessageDataBatcher
+from serialize_utils import TextDataBatcher, StepAMessageResultBatcher, PendingTextDataBatcher, StepAResultBatcher
+from TextEncoder import TextEncoder
 
-STEPA_NEXT_UDL_SHARD_INDEX = 2
 
-def deserialize_string_list(serialized_data):
-    """Deserialize a custom binary format into a list of strings."""
-    num_elements = struct.unpack("I", serialized_data[:4])[0]  # Read the number of elements
-    offset_size = num_elements * 4  # Each offset is 4 bytes
+STEPA_NEXT_UDL_PREFIX = "/stepD/stepA_"
+STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
+STEPA_NEXT_UDL_SUBGROUP_INDEX = 0
+STEPA_NEXT_UDL_SHARDS = [2]
 
-    if num_elements == 0:
-        return []
+STEPA_WORKER_INITIAL_PENDING_BATCHES = 10
 
-    offsets = struct.unpack(f"{num_elements}I", serialized_data[4:4 + offset_size])  # Read offsets
-    string_section = serialized_data[4 + offset_size:]  # Extract string section
 
-    # Extract strings using offsets
-    string_list = []
-    for i in range(num_elements):
-        start = offsets[i]
-        end = offsets[i + 1] if i + 1 < num_elements else len(string_section)
-        string_list.append(string_section[start:end].decode('utf-8'))
+class StepAModelWorker:
+    '''
+    This is a batcher for StepA execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.max_exe_batch_size = self.parent.max_exe_batch_size
+        self.batch_time_us = self.parent.batch_time_us
+        self.text_encoder = TextEncoder(self.parent.checkpoint_path, self.parent.local_encoder_path, self.parent.local_projection_path)
+        self.pending_batches = [PendingTextDataBatcher(self.max_exe_batch_size) for _ in range(STEPA_WORKER_INITIAL_PENDING_BATCHES)]
+        
+        self.current_batch = -1    # current batch idx that main is executing
+        self.next_batch = 0        # next batch idx to add new data
+        self.next_to_process = 0  
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+    
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
 
-    return string_list
+
+    def push_to_pending_batches(self, text_data_batcher):
+        num_questions = len(text_data_batcher.question_ids)
+        question_added = 0
+        with self.cv:
+            while question_added < num_questions:
+                free_batch = self.next_batch
+                space_left = self.pending_batches[free_batch].space_left()
+                # Find the idx in the pending_batches to add the data
+                while space_left == 0:
+                    free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch == self.current_batch:
+                        free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch >= self.next_batch:
+                        break
+                    space_left = self.pending_batches[free_batch].space_left()
+                if space_left == 0:
+                    # Need to create new batch, if all the pending_batches are full
+                    new_batch = PendingTextDataBatcher(self.max_batch_size)
+                    self.pending_batches.append(new_batch)  
+                    free_batch = len(self.pending_batches) - 1
+                    space_left = self.pending_batches[free_batch].space_left()
+                
+                # add as many questions as possible to the pending batch
+                self.next_batch = free_batch
+                question_start_idx = question_added
+                end_idx = self.pending_batches[free_batch].add_data(text_data_batcher, question_start_idx)
+                question_added = end_idx
+                #  if we complete filled the buffer, cycle to the next
+                if self.pending_batches[free_batch].space_left() == 0:
+                    self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                    if self.next_batch == self.current_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                        
+            self.cv.notify()
+            print("added to queue")
+            
+
+    def main_loop(self):
+        batch = None
+        while self.running:
+            if not batch is None:
+                batch.reset()
+            with self.cv:
+                self.current_batch = -1
+                if self.pending_batches[self.next_to_process].num_pending == 0:
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
+                    
+                if self.pending_batches[self.next_to_process].num_pending != 0:
+                    self.current_batch = self.next_to_process
+                    self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
+                    batch = self.pending_batches[self.current_batch]
+                    
+                    if self.current_batch == self.next_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    print("found something to process")
+            if not self.running:
+                break
+            if self.current_batch == -1 or not batch:
+                continue
+            
+            print("about to execute")
+            # Execute the batch
+            # TODO: use direct memory sharing via pointer instead of copying to the host
+            # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
+            cur_input_ids = torch.as_tensor(batch.input_ids[:batch.num_pending], dtype=torch.long, device="cuda") 
+            cur_attention_mask = torch.as_tensor(batch.attention_mask[:batch.num_pending], dtype=torch.long, device="cuda")
+            text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(cur_input_ids, cur_attention_mask)
+            result_batch = StepAResultBatcher(text_embeddings.cpu().detach().numpy(),
+                                               text_encoder_hidden_states.cpu().detach().numpy(), 
+                                               batch.input_ids[:batch.num_pending],
+                                               batch.question_ids[:batch.num_pending], 
+                                               batch.text_sequence[:batch.num_pending],
+                                               batch.num_pending)
+            
+            # Appending to the sending buffer to be sent by the emit worker
+            self.parent.emit_worker.add_to_buffer(result_batch)
+            print("added to send buffer")
+            self.pending_batches[self.current_batch].reset()
+
+
+class StepAEmitWorker:
+    '''
+    This is a batcher for StepA execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.send_buffer = []  # list of PendingTextDataBatcher
+        self.max_emit_batch_size = self.parent.max_emit_batch_size
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+    
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+    def add_to_buffer(self, stepAResultBatcher):
+        with self.cv:
+            self.send_buffer.append(stepAResultBatcher)
+            self.cv.notify()
+            
+    def process_and_emit_results(self, to_send):
+        # slice the StepAResultBatcher into batch size of max_emit_batch_size
+        num_sent = 0
+        to_send_idx = 0
+        to_send_start_pos = [0 for _ in range(len(to_send))]
+        total_to_send = sum([x.num_queries for x in to_send])
+        while num_sent < total_to_send:
+            # Serialize the batch into StepAMessageResultBatcher
+            message_batch = StepAMessageResultBatcher()
+            message_batch.max_emit_batch_size = self.max_emit_batch_size
+            while to_send_idx < len(to_send) and message_batch.space_left() > 0:
+                start_pos = to_send_start_pos[to_send_idx]
+                cur_size = min(message_batch.space_left(), to_send[to_send_idx].num_queries - start_pos)
+                end_pos = start_pos + cur_size
+                message_batch.stepa_results.append(to_send[to_send_idx]) # use reference to avoid deep-copy its fields' data
+                message_batch.stepa_results_start_end_pos.append([start_pos, end_pos])
+                message_batch.batch_size += cur_size
+                if end_pos == to_send[to_send_idx].num_queries:
+                    to_send_idx += 1
+                else:
+                    to_send_start_pos[to_send_idx] = end_pos
+            # message_batch.stepa_results = to_send[num_sent:num_sent+batch_size]
+            message_batch_serialized = message_batch.serialize_from_stepa_results()
+            msg_id = self.parent.sent_msg_count
+            new_key = STEPA_NEXT_UDL_PREFIX + str(msg_id)
+            shard_pos = msg_id % len(STEPA_NEXT_UDL_SHARDS) # round robin to the dedicated shards
+            # TODO use put_nparray
+            self.parent.capi.put(new_key, message_batch_serialized.tobytes(), 
+                                    subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
+                                    subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
+                                    shard_index=STEPA_NEXT_UDL_SHARDS[shard_pos], 
+                                    message_id=msg_id, as_trigger=True, blocking=False) # async put
+            num_sent += message_batch.batch_size
+        if num_sent > 0:
+                print(f"sent {num_sent} resultA to next UDL")
+        
+    
+    def main_loop(self):
+        batch_wait_time = self.parent.batch_time_us/1000000
+        while self.running:
+            to_send = []
+            with self.cv:
+                if len(self.send_buffer) == 0:
+                    self.cv.wait(timeout=batch_wait_time)
+                if not self.running:
+                    break
+                
+                if not len(self.send_buffer) == 0:
+                    to_send = self.send_buffer
+                    self.send_buffer = []
+                    
+            self.process_and_emit_results(to_send)
+            
+        
 
 
 class StepAUDL(UserDefinedLogic):
     '''
-    ConsolePrinter is the simplest example showing how to use the udl
+    StepAUDL is the simplest example showing how to use the udl
     '''
     def __init__(self,conf_str):
         '''
@@ -48,120 +236,59 @@ class StepAUDL(UserDefinedLogic):
         '''
         super(StepAUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
+        # print(f"StepAUDL constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
-        self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_A_query_text_encoder.pt'
-        self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_A_query_text_linear.pt'
-        self.flmr_config                = None
-        self.query_tokenizer            = None
-        self.context_tokenizer          = None   
-        self.query_text_encoder         = None 
-        self.query_text_encoder_linear  = None
-        self.device                     = 'cpu'
-        self.skiplist = []
         
-    def load_model_cpu(self):
-        self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
-        self.query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(
-                self.checkpoint_path, 
-                text_config=self.flmr_config.text_config, 
-                subfolder="query_tokenizer")
-        if self.flmr_config.mask_instruction_token is not None:
-            self.mask_instruction = True
-            # obtain the token id of the instruction token
-            self.instruction_token_id = self.query_tokenizer.encode(
-                self.flmr_config.mask_instruction_token, add_special_tokens=False
-            )[0]
-        else:
-            self.mask_instruction = False
-        
-        self.query_text_encoder = FLMRTextModel(self.flmr_config.text_config)
-        self.query_text_encoder_linear = nn.Linear(self.flmr_config.text_config.hidden_size, self.flmr_config.dim, bias=False)
-        
-        try:
-            self.query_text_encoder.load_state_dict(torch.load(self.local_encoder_path, weights_only=True))
-            self.query_text_encoder_linear.load_state_dict(torch.load(self.local_projection_path, weights_only=True))
-        except:
-            print(f'Failed to load models checkpoint!!! \n Please check {self.local_encoder_path} or {self.local_projection_path}')
+        self.checkpoint_path = self.conf["checkpoint_path"]
+        self.local_encoder_path = self.conf["local_encoder_path"]
+        self.local_projection_path = self.conf["local_projection_path"]
 
-    def load_model_gpu(self):
-        self.device = 'cuda'
-        self.query_text_encoder_linear.to(self.device)
-        self.query_text_encoder.to(self.device)
+        self.max_exe_batch_size = int(self.conf.get("max_exe_batch_size", 16))
+        self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
+        self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
+        
+        
+        self.model_worker = None
+        self.emit_worker = None
+        self.sent_msg_count = 0
+
+
+    def start_threads(self):
+        '''
+        Start the worker threads
+        '''
+        if not self.model_worker:
+            self.model_worker = StepAModelWorker(self, 1)
+            self.model_worker.start()
+            self.emit_worker = StepAEmitWorker(self, 2)
+            self.emit_worker.start()
 
     def ocdpo_handler(self,**kwargs):
         '''
         The off-critical data path handler
         '''
+        # Only start the model_worker if this UDL is triggered on this node
+        if not self.model_worker:
+            self.start_threads()
+            
         key = kwargs['key']
         blob = kwargs["blob"]
         
         new_batcher = TextDataBatcher()
         new_batcher.deserialize(blob)
-        encoded_inputs = new_batcher.get_data()
-        # blob_bytes = blob.tobytes()
-        # res_json_str = blob_bytes.decode('utf-8')
-        # encoded_inputs = json.loads(res_json_str)
-        input_ids_np = np.copy(encoded_inputs['input_ids'])
-        attn_msk_np = np.copy(encoded_inputs['attention_mask'])
-        key_id = key[int(key.find('_'))+1:]
-        batch_id = int(key_id)
-        self.tl.log(20041, batch_id, 0, 0)
-        # print('===========Step A start loading model==========')
-        if self.query_text_encoder_linear == None:
-            self.load_model_cpu()
-            self.load_model_gpu()
-        # encoded_inputs      = self.query_tokenizer(string_list)
-        input_ids           = torch.LongTensor(input_ids_np).to(self.device)
-        attention_mask      = torch.Tensor(attn_msk_np).to(self.device)
-        # print(f"STEP A Got input ids of shape: {input_ids.shape} | attn_mask of shape: {attention_mask.shape}")
-        text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
-        text_encoder_hidden_states = text_encoder_outputs[0]
-        text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)
-        # print('==========Step A finished forward pass==========')
-        # print(f'text embedding of shape: \t {text_embeddings.shape}')
-        # print(f'input ids of shape: \t\t {text_embeddings.shape}')
-        # print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
-        # result = {}
-        # result['queries'] = encoded_inputs["text_sequence"]
-        # result['question_id'] = encoded_inputs["question_ids"]
-        # result['input_ids'] = input_ids.tolist()
-        # result['text_embeddings'] = text_embeddings.tolist()
-        # result['text_encoder_hidden_states'] = text_encoder_hidden_states.tolist()
-        # res_json_str = json.dumps(result)
-        # res_json_byte = res_json_str.encode('utf-8')
-        
-        stepa_serializer = StepAMessageDataBatcher()
-        stepa_serializer.queries = encoded_inputs["text_sequence"]
-        stepa_serializer.question_ids = encoded_inputs["question_ids"]
-        stepa_serializer.input_ids = input_ids.cpu().detach().numpy()
-        stepa_serializer.text_embeds = text_embeddings.cpu().detach().numpy()
-        stepa_serializer.text_encoder_hidden_states = text_encoder_hidden_states.cpu().detach().numpy()
-        
-        stepa_serialized_np = stepa_serializer.serialize()
-        subgroup_type = "VolatileCascadeStoreWithStringKey"
-        subgroup_index = 0
-        prefix = "/stepD/stepA_"
-        
-        # indices = [i for i, char in enumerate(key) if char == "/"]
-        # key_id = key[int(indices[-1]):]
-        
-        new_key =  prefix + key_id
-        res = self.capi.put(new_key, stepa_serialized_np.tobytes(), subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=STEPA_NEXT_UDL_SHARD_INDEX, message_id=1)
-        self.tl.log(20050, batch_id, 0, 0)
-        if batch_id==49:
-            self.tl.flush(f"node{self.my_id}_STEPA_udls_timestamp.dat")
-            print("STEPA TL flushed!!!")
-        
+        self.model_worker.push_to_pending_batches(new_batcher)
         
         
     def __del__(self):
         '''
         Destructor
         '''
-        print(f"ConsolePrinterUDL destructor")
-        pass
+        print(f"StepAUDL destructor")
+        if self.model_worker:
+            self.model_worker.signal_stop()
+            self.model_worker.join()
+        if self.emit_worker:
+            self.emit_worker.signal_stop()
+            self.emit_worker.join()
