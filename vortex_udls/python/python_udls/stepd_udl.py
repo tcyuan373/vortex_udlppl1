@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer
-from serialize_utils import StepDMessageBatcher, StepAMessageDataBatcher, VisionDataBatcher
+from serialize_utils import StepDMessageBatcher, StepAMessageResultBatcher, VisionDataBatcher
 
 STEPD_NEXT_UDL_SHARD_INDEX = 0
 
@@ -227,7 +227,7 @@ class StepDUDL(UserDefinedLogic):
         if step_A_idx != -1:
             self.tl.log(30000, batch_id, 1, 0)
 
-            stepa_serializer = StepAMessageDataBatcher()
+            stepa_serializer = StepAMessageResultBatcher()
             stepa_serializer.deserialize(blob)
             blob_data = stepa_serializer.get_data()
             input_ids_np = np.copy(blob_data["input_ids"])
@@ -236,7 +236,8 @@ class StepDUDL(UserDefinedLogic):
             self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(input_ids_np)
             self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeds'])
             self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
-            
+            print("StepD has deserialized stepA data")
+            stepa_serializer.print_shape()
         elif step_B_idx != -1:
             self.tl.log(30000, batch_id, 2, 0)
             stepb_batcher = VisionDataBatcher()

@@ -1,13 +1,14 @@
 from flmr import FLMRConfig, FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, FLMRTextModel
 import torch
-from torch import Tensor, nn
+from torch import nn
+
 
 
 class TextEncoder:
-    def __init__(self):
-        self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_encoder_path         = '/mnt/nvme0/yy354/models/models_pipeline1/models_step_A_query_text_encoder.pt'
-        self.local_projection_path      = '/mnt/nvme0/yy354/models/models_pipeline1/models_step_A_query_text_linear.pt'
+    def __init__(self, checkpoint_path, local_encoder_path, local_projection_path):
+        self.checkpoint_path            = checkpoint_path
+        self.local_encoder_path         = local_encoder_path
+        self.local_projection_path      = local_projection_path
         self.flmr_config                = None
         self.query_tokenizer            = None
         self.context_tokenizer          = None   
@@ -55,8 +56,6 @@ class TextEncoder:
         if self.query_text_encoder_linear == None:
             self.load_model_cpu()
             self.load_model_gpu()
-        input_ids = torch.LongTensor(input_ids).to(self.device)
-        attention_mask = torch.LongTensor(attention_mask).to(self.device)
         print(f"input_id shape: {input_ids.shape} | attention_mask shape: {attention_mask.shape}")
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
@@ -65,4 +64,5 @@ class TextEncoder:
         print(f'text embedding of shape: \t {text_embeddings.shape}')
         print(f'input ids of shape: \t\t {text_embeddings.shape}')
         print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
+        
         return text_embeddings, text_encoder_hidden_states

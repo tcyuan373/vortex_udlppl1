@@ -1,5 +1,19 @@
+import warnings
+warnings.filterwarnings("ignore")
 import numpy as np
-import ctypes
+
+'''
+Serialization helper classes and functions for Pipeline1, FLMR pipeline 
+'''
+
+
+def utf8_length(s: str) -> int:
+    """Computes the length of a UTF-8 encoded string without actually encoding it."""
+    return sum(1 + (ord(c) >= 0x80) + (ord(c) >= 0x800) + (ord(c) >= 0x10000) for c in s)
+
+
+
+# ===============  Class and Serializer for Monolithic pipeline ===============
 
 class MonoDataBatcher:
     def __init__(self):
@@ -9,8 +23,6 @@ class MonoDataBatcher:
         self.question_ids = []           # List of ints (one per query)
         self.questions = []              # List of strings (one per query)
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
-    def utf8_length(self, s: str) -> int:
-        return len(s.encode("utf-8"))  # More efficient way to compute UTF-8 byte length
     
     def serialize(self) -> np.ndarray:
 
@@ -152,98 +164,8 @@ class MonoDataBatcher:
             "text_sequence": self.text_sequence
         }
         
-        
-class PixelValueBatcher:
-    def __init__(self):
-        # Expected shape: (batch_size, 1, 3, 224, 224) and dtype=np.float32.
-        self.pixel_values: np.ndarray = None
-        # Query IDs as a NumPy array of shape (batch_size,) and dtype=np.int64.
-        self.question_ids: np.ndarray = None
-        # Internal buffer (serialized data)
-        self._bytes: np.ndarray = None
 
-    def serialize(self) -> np.ndarray:
-        """
-        Serialize the pixel_values and question_ids into a contiguous buffer.
-        Layout:
-        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
-        """
-        if self.pixel_values is None or self.question_ids is None:
-            raise ValueError("Both pixel_values and question_ids must be provided.")
-        
-        # Ensure question_ids is a NumPy array.
-        question_ids_array = np.asarray(self.question_ids, dtype=np.int64)
-        batch_size = question_ids_array.shape[0]
-        
-        if self.pixel_values.shape[0] != batch_size:
-            raise ValueError("The first dimension of pixel_values must match the number of question_ids.")
-        
-        # Calculate sizes.
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
-        question_ids_size = question_ids_array.nbytes       # batch_size * 8 bytes
-        pixel_values_size = self.pixel_values.nbytes  # batch_size * 1 * 3 * 224 * 224 * 4
-        
-        total_size = header_size + question_ids_size + pixel_values_size
-        # Allocate one contiguous buffer.
-        buffer = np.empty(total_size, dtype=np.uint8)
-        offset = 0
-
-        # --- Write header: batch_size ---
-        header_arr = np.array([batch_size], dtype=np.uint32)
-        # Create a view into header_arr as uint8 (zero-copy view) and copy into the buffer slice.
-        buffer[offset:offset + header_size] = header_arr.view(np.uint8)
-        offset += header_size
-
-        # --- Write question_ids ---
-        # Use a view of the question_ids array as uint8.
-        buffer[offset:offset + question_ids_size] = question_ids_array.view(np.uint8)
-        offset += question_ids_size
-
-        # --- Write pixel_values ---
-        buffer[offset:offset + pixel_values_size] = self.pixel_values.view(np.uint8).reshape(-1)
-        offset += pixel_values_size
-
-        self._bytes = buffer
-        return buffer
-
-    def deserialize(self, data: np.ndarray):
-        """
-        Deserialize a contiguous uint8 buffer into question_ids and pixel_values with zero-copy.
-        The layout of the buffer is:
-        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
-        where pixel_values is expected to have shape (batch_size, 1, 3, 224, 224).
-        """
-        self._bytes = data
-        buffer = data
-        offset = 0
-
-        # --- Read header: batch_size ---
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
-        batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
-        offset += header_size
-
-        # --- Read question_ids ---
-        question_ids_count = batch_size  # one int64 per example
-        question_ids = np.frombuffer(buffer, dtype=np.int64, count=question_ids_count, offset=offset)
-        offset += question_ids.nbytes  # or batch_size * np.dtype(np.int64).itemsize
-
-        # --- Read pixel_values ---
-        pixel_shape = (batch_size, 1, 3, 224, 224)
-        num_pixels = np.prod(pixel_shape)
-        # Create a zero-copy view and then reshape it
-        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=num_pixels, offset=offset).reshape(pixel_shape)
-        offset += num_pixels * np.dtype(np.float32).itemsize
-
-        # Assign fields (these are zero-copy views into the original buffer)
-        self.question_ids = question_ids
-        self.pixel_values = pixel_values
-
-    def get_data(self):
-        return {
-            "question_ids": self.question_ids,
-            "pixel_values": self.pixel_values
-        }
-
+#===============  Class and Serializer for Step A Text encoder ===============
 
 class TextDataBatcher:
     def __init__(self):
@@ -253,10 +175,6 @@ class TextDataBatcher:
         self.input_ids = None       # np.ndarray of shape (batch_size, 32), dtype=np.int64.
         self.attention_mask = None  # np.ndarray of shape (batch_size, 32), dtype=np.int64.
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
-
-    def utf8_length(self, s: str) -> int:
-        """Return the byte-length of s when encoded in UTF-8."""
-        return len(s.encode("utf-8"))
 
     def serialize(self) -> np.ndarray:
         """
@@ -271,19 +189,15 @@ class TextDataBatcher:
               * text_sequence: concatenated UTF-8 encoded bytes.
         """
         batch_size = len(self.question_ids)
-        if len(self.text_sequence) != batch_size:
-            raise ValueError("text_sequence and question_ids must have the same length")
-        if self.input_ids is None or self.input_ids.shape[0] != batch_size:
-            raise ValueError("input_ids must be provided and its first dimension must equal batch_size")
-        if self.attention_mask is None or self.attention_mask.shape[0] != batch_size:
-            raise ValueError("attention_mask must be provided and its first dimension must equal batch_size")
+        if len(self.text_sequence) != batch_size or self.input_ids.shape[0] != batch_size or self.attention_mask.shape[0] != batch_size:
+            raise ValueError("TextDataBatcher input dimension mismatch.")
         
         # Compute offsets and total size for text_sequence without storing encoded values.
         text_seq_offsets = []
         offset_temp = 0
         for t in self.text_sequence:
             text_seq_offsets.append(offset_temp)
-            offset_temp += self.utf8_length(t)
+            offset_temp += utf8_length(t)
         total_text_seq_size = offset_temp
 
         header_size = np.dtype(np.uint32).itemsize   # 4 bytes
@@ -317,7 +231,7 @@ class TextDataBatcher:
                                        dtype=metadata_dtype)
         for i, t in enumerate(self.text_sequence):
             metadata_array[i]["text_sequence_offset"] = text_seq_offsets[i]
-            metadata_array[i]["text_sequence_length"] = self.utf8_length(t)
+            metadata_array[i]["text_sequence_length"] = utf8_length(t)
         offset += metadata_size
 
         # --- Write question_ids ---
@@ -450,16 +364,30 @@ class PendingTextDataBatcher():
         return end_pos
 
     def reset(self):
-        self.question_ids.clear()
-        self.text_sequence.clear()
-        self.input_ids.fill(0)
+        '''
+        Reset the fields
+        @attention_mask are inputs to the encoder execution, and no longer needed afterwards, setting them to zeros during reset
+        @input_ids @question_ids and @text_sequence are still needed to form stepAResultBatcher
+         reassigned them to new list and the reference counter will now be held by the new object StepAResultBatcher
+        '''
+        self.question_ids = []
+        self.text_sequence = []
+        self.input_ids = np.empty((self.max_batch_size, 32), dtype=np.int64)
         self.attention_mask.fill(0)
         self.num_pending = 0
         
 
+class StepAResultBatcher:
+    def __init__(self, text_embeddings, text_encoder_hidden_states, input_ids, question_ids, text_sequence, num_queries):
+        self.text_embeddings = text_embeddings
+        self.text_encoder_hidden_states = text_encoder_hidden_states
+        self.input_ids = input_ids
+        self.question_ids = question_ids
+        self.text_sequence = text_sequence
+        self.num_queries = num_queries
+
     
-        
-class StepAMessageDataBatcher:
+class StepAMessageResultBatcher:
     def __init__(self):
         # All fields must have the same batch size.
         self.question_ids = []      # List[int] of length batch_size.
@@ -468,16 +396,28 @@ class StepAMessageDataBatcher:
         self.text_encoder_hidden_states = None  # np.ndarray of shape (batch_size, 32, 768), dtype=np.float32.
         self.queries = []           # List[str] of length batch_size.
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        
+        self.max_emit_batch_size = 0
+        self.stepa_results = []    # List of StepAResultBatcher objects
+        self.stepa_results_start_end_pos = [] # List of tuples (start_pos, end_pos) for each StepAResultBatcher object
+        self.batch_size = 0
+        
+        # metadata sizes used for serialization and deserialization
+        self.header_size = np.dtype(np.uint32).itemsize
+        # Metadata: for each query, two int64 fields (query_offset, query_length)
+        self.metadata_dtype = np.dtype([("query_offset", np.int64), ("query_length", np.int64)])
+        self.metadata_size = self.metadata_dtype.itemsize
+        self.text_pos = {}   # qid -> (offset, length)
 
-    def utf8_length(self, s: str) -> int:
-        """Return the byte-length of s when encoded in UTF-8."""
-        return len(s.encode("utf-8"))
+    def space_left(self):
+        return self.max_emit_batch_size - self.batch_size
 
-    def serialize(self) -> np.ndarray:
+    def serialize_from_stepa_results(self):
         """
-        Serializes the following fields into a contiguous byte buffer:
+        Serializes the aggregated fields from self.stepa_results into one contiguous byte buffer.
+        The serialized format is as follows:
           - Header: 4 bytes (batch_size, as uint32).
-          - Metadata for queries: For each query, two int64 values:
+          - Metadata for queries: for each query, two int64 values:
                 * query_offset: starting offset (in bytes) within the variable segment.
                 * query_length: byte-length of the query.
           - Fixed segments:
@@ -487,92 +427,67 @@ class StepAMessageDataBatcher:
                 * text_encoder_hidden_states: (batch_size, 32, 768) float32.
           - Variable segment:
                 * queries: concatenated UTF-8 encoded bytes.
+        @Note: this method serialize the data from stepa_results via slicing from the stepa_results_start_end_pos. 
+               This is due to the max_emit_batch_size limit for the message passing
         """
-        batch_size = len(self.question_ids)
-        if len(self.queries) != batch_size:
-            raise ValueError("Length of queries must equal length of question_ids")
-        if self.input_ids is None or self.input_ids.shape[0] != batch_size:
-            raise ValueError("input_ids must have first dimension equal to batch_size")
-        if self.text_embeds is None or self.text_embeds.shape[0] != batch_size:
-            raise ValueError("text_embeds must have first dimension equal to batch_size")
-        if self.text_encoder_hidden_states is None or self.text_encoder_hidden_states.shape[0] != batch_size:
-            raise ValueError("text_encoder_hidden_states must have first dimension equal to batch_size")
-
-        # --- Compute offsets for queries variable segment using utf8_length() ---
-        query_offsets = []
-        offset_temp = 0
-        for q in self.queries:
-            query_offsets.append(offset_temp)
-            offset_temp += self.utf8_length(q)
-        total_queries_size = offset_temp
-
-        # --- Determine sizes for fixed parts ---
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes.
-        # Metadata: for each query, two int64 fields.
-        metadata_dtype = np.dtype([
-            ("query_offset", np.int64),
-            ("query_length", np.int64)
-        ])
-        metadata_size = batch_size * metadata_dtype.itemsize
-
-        qids_size = batch_size * np.dtype(np.int64).itemsize
-        input_ids_size = batch_size * 32 * np.dtype(np.int64).itemsize
-        text_embeds_size = batch_size * 32 * 128 * np.dtype(np.float32).itemsize
-        hidden_states_size = batch_size * 32 * 768 * np.dtype(np.float32).itemsize
-
-        total_size = (header_size + metadata_size + qids_size + input_ids_size +
-                      text_embeds_size + hidden_states_size + total_queries_size)
+        # Compute the metadata position and total size
+        # batch_size = sum(len(r.question_ids) for r in self.stepa_results)
+        metadata_size = self.batch_size * self.metadata_size
+        qids_size = self.batch_size * np.dtype(np.int64).itemsize
+        input_ids_size = self.batch_size * 32 * np.dtype(np.int64).itemsize
+        text_embeds_size = self.batch_size * 32 * 128 * np.dtype(np.float32).itemsize
+        hidden_states_size = self.batch_size * 32 * 768 * np.dtype(np.float32).itemsize
+        text_offset = self.header_size + metadata_size + qids_size + input_ids_size + text_embeds_size + hidden_states_size
+        total_text_sequence_size = 0
+        cur_text_offset = text_offset        
+        for res_pos, r in enumerate(self.stepa_results):
+            start_pos, end_pos = self.stepa_results_start_end_pos[res_pos]
+            for idx in range(start_pos, end_pos):
+                text_seq_size = utf8_length(r.text_sequence[idx])
+                self.text_pos[r.question_ids[idx]] = (cur_text_offset, text_seq_size)
+                cur_text_offset += text_seq_size
+                total_text_sequence_size += text_seq_size
+        total_size = text_offset + total_text_sequence_size
 
         # Allocate one contiguous buffer.
-        buffer = np.zeros(total_size, dtype=np.uint8)
-        offset = 0
-
-        # --- Write header: batch_size (uint32) ---
-        np.frombuffer(buffer[:header_size], dtype=np.uint32)[0] = batch_size
-        offset += header_size
-
-        # --- Write metadata for queries ---
-        metadata_start = offset
-        metadata_array = np.frombuffer(buffer[metadata_start:metadata_start+metadata_size],
-                                       dtype=metadata_dtype)
-        for i, q in enumerate(self.queries):
-            metadata_array[i]["query_offset"] = query_offsets[i]
-            metadata_array[i]["query_length"] = self.utf8_length(q)
-        offset += metadata_size
-
-        # --- Write question_ids ---
-        qids_start = offset
-        qids_array = np.frombuffer(buffer[qids_start:qids_start+qids_size], dtype=np.int64)
-        qids_array[:] = np.array(self.question_ids, dtype=np.int64)
-        offset += qids_size
-
-        # --- Write input_ids ---
-        input_ids_start = offset
-        buffer[input_ids_start:input_ids_start+input_ids_size] = self.input_ids.view(np.uint8).reshape(-1)
-        offset += input_ids_size
-
-        # --- Write text_embeds ---
-        text_embeds_start = offset
-        buffer[text_embeds_start:text_embeds_start+text_embeds_size] = self.text_embeds.view(np.uint8).reshape(-1)
-        offset += text_embeds_size
-
-        # --- Write text_encoder_hidden_states ---
-        hidden_states_start = offset
-        buffer[hidden_states_start:hidden_states_start+hidden_states_size] = self.text_encoder_hidden_states.view(np.uint8).reshape(-1)
-        offset += hidden_states_size
-
-        # --- Write queries variable segment ---
-        queries_start = offset
-        pos = queries_start
-        for q in self.queries:
-            enc = q.encode("utf-8")  # Encode inline.
-            n = len(enc)             # or self.utf8_length(q)
-            buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
-            pos += n
-        offset += total_queries_size
-
-        self._bytes = buffer
-        return buffer
+        self._bytes = np.empty(total_size, dtype=np.uint8)
+        
+        # Determine segment positions     
+        metadata_pos = self.header_size
+        qids_offset = metadata_pos + metadata_size
+        input_ids_offset = qids_offset + qids_size
+        text_embeds_offset = input_ids_offset + input_ids_size
+        hidden_states_offset = text_embeds_offset + text_embeds_size
+        
+        # Write Header: batch_size (as uint32)
+        np.frombuffer(self._bytes[:self.header_size], dtype=np.uint32)[0] = self.batch_size
+        
+        
+        metadata_array = np.frombuffer(self._bytes[metadata_pos:metadata_pos + metadata_size], dtype=self.metadata_dtype)
+        qid_array = np.frombuffer(self._bytes[qids_offset:qids_offset + qids_size], dtype=np.int64)
+        input_ids_array = np.frombuffer(self._bytes[input_ids_offset:input_ids_offset + input_ids_size], dtype=np.int64).reshape((self.batch_size, 32))
+        text_embeds_array = np.frombuffer(self._bytes[text_embeds_offset:text_embeds_offset + text_embeds_size], dtype=np.float32).reshape((self.batch_size, 32, 128))
+        hidden_states_array = np.frombuffer(self._bytes[hidden_states_offset:hidden_states_offset + hidden_states_size], dtype=np.float32).reshape((self.batch_size, 32, 768))
+        
+        written_counter = 0
+        for res_pos, r in enumerate(self.stepa_results):
+            start_pos, end_pos = self.stepa_results_start_end_pos[res_pos]
+            for idx in range(start_pos, end_pos):
+                qid = r.question_ids[idx]
+                abs_offset, qlen = self.text_pos[qid]
+                metadata_array[written_counter]["query_offset"] = abs_offset  # Absolute offset in the entire buffer.
+                metadata_array[written_counter]["query_length"] = qlen
+                
+                qid_array[written_counter] = qid
+                input_ids_array[written_counter] = r.input_ids[idx]
+                text_embeds_array[written_counter] = r.text_embeddings[idx]
+                hidden_states_array[written_counter] = r.text_encoder_hidden_states[idx]
+                # Below method allocate memory for the text sequence to encode it, and then copy it to the _bytes array, which isn't ideal with this memory allocation and copy
+                # TODO: better way to write to _bytes with less copy
+                self._bytes[abs_offset:abs_offset + qlen] = np.frombuffer(r.text_sequence[idx].encode("utf-8"), dtype=np.uint8)
+                written_counter += 1
+        return self._bytes
+                
 
     def deserialize(self, data: np.ndarray):
         """
@@ -592,17 +507,16 @@ class StepAMessageDataBatcher:
         offset = 0
 
         # --- Read header ---
-        header_size = np.dtype(np.uint32).itemsize
         batch_size = int(np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0])
-        offset += header_size
+        offset += self.header_size
 
         # --- Read metadata for queries ---
         metadata_dtype = np.dtype([
             ("query_offset", np.int64),
             ("query_length", np.int64)
         ])
-        metadata_size = batch_size * metadata_dtype.itemsize
-        metadata_array = np.frombuffer(buffer, dtype=metadata_dtype, count=batch_size, offset=offset)
+        metadata_size = batch_size * self.metadata_size
+        metadata_array = np.frombuffer(buffer, dtype=self.metadata_dtype, count=batch_size, offset=offset)
         offset += metadata_size
 
         # --- Read question_ids ---
@@ -629,14 +543,13 @@ class StepAMessageDataBatcher:
         offset += hidden_states_size
 
         # --- Read queries variable segment ---
-        total_queries_size = sum(int(x) for x in metadata_array["query_length"])
-        queries_bytes = buffer[offset:offset+total_queries_size]
-        offset += total_queries_size
         queries = []
         for m in metadata_array:
             start = int(m["query_offset"])
             length = int(m["query_length"])
-            queries.append(queries_bytes[start:start+length].tobytes().decode("utf-8"))
+            # Extract query bytes from the entire buffer using the absolute offset.
+            query_bytes = buffer[start:start+length]
+            queries.append(query_bytes.tobytes().decode("utf-8"))
 
         # Restore fields.
         self.question_ids = qids
@@ -644,6 +557,14 @@ class StepAMessageDataBatcher:
         self.text_embeds = text_embeds
         self.text_encoder_hidden_states = text_encoder_hidden_states
         self.queries = queries
+        
+    def print_shape(self):
+        print("--- StepAMessageResultBatcher shape info ---")
+        print(f"question_ids: {len(self.question_ids)}")
+        print(f"input_ids: {self.input_ids.shape}")
+        print(f"text_embeds: {self.text_embeds.shape}")
+        print(f"text_encoder_hidden_states: {self.text_encoder_hidden_states.shape}")
+        print(f"queries: {len(self.queries)}")
 
     def get_data(self):
         return {
@@ -655,6 +576,103 @@ class StepAMessageDataBatcher:
         }
 
 
+
+# ===============  Class and Serializer for Step B Image encoder ===============
+
+class PixelValueBatcher:
+    def __init__(self):
+        # Expected shape: (batch_size, 1, 3, 224, 224) and dtype=np.float32.
+        self.pixel_values: np.ndarray = None
+        # Query IDs as a NumPy array of shape (batch_size,) and dtype=np.int64.
+        self.question_ids: np.ndarray = None
+        # Internal buffer (serialized data)
+        self._bytes: np.ndarray = None
+
+    def serialize(self) -> np.ndarray:
+        """
+        Serialize the pixel_values and question_ids into a contiguous buffer.
+        Layout:
+        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
+        """
+        if self.pixel_values is None or self.question_ids is None:
+            raise ValueError("Both pixel_values and question_ids must be provided.")
+        
+        # Ensure question_ids is a NumPy array.
+        question_ids_array = np.asarray(self.question_ids, dtype=np.int64)
+        batch_size = question_ids_array.shape[0]
+        
+        if self.pixel_values.shape[0] != batch_size:
+            raise ValueError("The first dimension of pixel_values must match the number of question_ids.")
+        
+        # Calculate sizes.
+        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
+        question_ids_size = question_ids_array.nbytes       # batch_size * 8 bytes
+        pixel_values_size = self.pixel_values.nbytes  # batch_size * 1 * 3 * 224 * 224 * 4
+        
+        total_size = header_size + question_ids_size + pixel_values_size
+        # Allocate one contiguous buffer.
+        buffer = np.empty(total_size, dtype=np.uint8)
+        offset = 0
+
+        # --- Write header: batch_size ---
+        header_arr = np.array([batch_size], dtype=np.uint32)
+        # Create a view into header_arr as uint8 (zero-copy view) and copy into the buffer slice.
+        buffer[offset:offset + header_size] = header_arr.view(np.uint8)
+        offset += header_size
+
+        # --- Write question_ids ---
+        # Use a view of the question_ids array as uint8.
+        buffer[offset:offset + question_ids_size] = question_ids_array.view(np.uint8)
+        offset += question_ids_size
+
+        # --- Write pixel_values ---
+        buffer[offset:offset + pixel_values_size] = self.pixel_values.view(np.uint8).reshape(-1)
+        offset += pixel_values_size
+
+        self._bytes = buffer
+        return buffer
+
+    def deserialize(self, data: np.ndarray):
+        """
+        Deserialize a contiguous uint8 buffer into question_ids and pixel_values with zero-copy.
+        The layout of the buffer is:
+        [4 bytes: batch_size (uint32)] | [question_ids (int64)] | [pixel_values (float32)]
+        where pixel_values is expected to have shape (batch_size, 1, 3, 224, 224).
+        """
+        self._bytes = data
+        buffer = data
+        offset = 0
+
+        # --- Read header: batch_size ---
+        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
+        batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
+        offset += header_size
+
+        # --- Read question_ids ---
+        question_ids_count = batch_size  # one int64 per example
+        question_ids = np.frombuffer(buffer, dtype=np.int64, count=question_ids_count, offset=offset)
+        offset += question_ids.nbytes  # or batch_size * np.dtype(np.int64).itemsize
+
+        # --- Read pixel_values ---
+        pixel_shape = (batch_size, 1, 3, 224, 224)
+        num_pixels = np.prod(pixel_shape)
+        # Create a zero-copy view and then reshape it
+        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=num_pixels, offset=offset).reshape(pixel_shape)
+        offset += num_pixels * np.dtype(np.float32).itemsize
+
+        # Assign fields (these are zero-copy views into the original buffer)
+        self.question_ids = question_ids
+        self.pixel_values = pixel_values
+
+    def get_data(self):
+        return {
+            "question_ids": self.question_ids,
+            "pixel_values": self.pixel_values
+        }
+
+
+# ===============  Class and Serializer for Step D cross attention  ===============
+
 class StepDMessageBatcher:
     def __init__(self):
         # All fields must have the same batch size.
@@ -662,10 +680,6 @@ class StepDMessageBatcher:
         self.queries = []            # List[str] of length batch_size.
         self.query_embeddings = None # np.ndarray of shape (batch_size, 320, 128), dtype=np.float32.
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
-
-    def utf8_length(self, s: str) -> int:
-        """Return the byte-length of s when encoded in UTF-8."""
-        return len(s.encode("utf-8"))
 
     def serialize(self) -> np.ndarray:
         """
@@ -691,7 +705,7 @@ class StepDMessageBatcher:
         offset_temp = 0
         for q in self.queries:
             query_offsets.append(offset_temp)
-            offset_temp += self.utf8_length(q)
+            offset_temp += utf8_length(q)
         total_queries_size = offset_temp
 
         # --- Compute sizes for fixed parts ---
@@ -722,7 +736,7 @@ class StepDMessageBatcher:
         metadata_array = np.frombuffer(buffer[metadata_start:metadata_start+metadata_size], dtype=metadata_dtype)
         for i, q in enumerate(self.queries):
             metadata_array[i]["query_offset"] = query_offsets[i]
-            metadata_array[i]["query_length"] = self.utf8_length(q)
+            metadata_array[i]["query_length"] = utf8_length(q)
         offset += metadata_size
 
         # --- Write question_ids ---
@@ -914,33 +928,89 @@ class VisionDataBatcher:
             "vision_hidden_states": self.vision_hidden_states
         }
 
-# === Example usage ===
+
+
+
+# =======================     Quick test     =======================
+def test_StepAMessageResultBatcher():
+    # Create dummy StepAResultBatcher objects.
+    # First result: batch size of 2.
+    dummy_input_ids_1 = np.full((2, 32), 1, dtype=np.int64)
+    dummy_text_embeddings_1 = np.ones((2, 32, 128), dtype=np.float32)
+    dummy_text_encoder_hidden_states_1 = np.ones((2, 32, 768), dtype=np.float32)
+    dummy_question_ids_1 = [101, 102]
+    dummy_text_sequence_1 = ["Hello, world!", "This is a test."]
+
+    result1 = StepAResultBatcher(
+        text_embeddings=dummy_text_embeddings_1,
+        text_encoder_hidden_states=dummy_text_encoder_hidden_states_1,
+        question_ids=dummy_question_ids_1,
+        text_sequence=dummy_text_sequence_1
+    )
+    result1.input_ids = dummy_input_ids_1
+
+    # Second result: batch size of 3.
+    dummy_input_ids_2 = np.full((3, 32), 2, dtype=np.int64)
+    dummy_text_embeddings_2 = np.full((3, 32, 128), 2, dtype=np.float32)
+    dummy_text_encoder_hidden_states_2 = np.full((3, 32, 768), 2, dtype=np.float32)
+    dummy_question_ids_2 = [201, 202, 203]
+    dummy_text_sequence_2 = ["Good morning.", "Good afternoon.", "Good night."]
+    
+    result2 = StepAResultBatcher(
+        text_embeddings=dummy_text_embeddings_2,
+        text_encoder_hidden_states=dummy_text_encoder_hidden_states_2,
+        question_ids=dummy_question_ids_2,
+        text_sequence=dummy_text_sequence_2
+    )
+    result2.input_ids = dummy_input_ids_2
+
+    # Create a StepAMessageResultBatcher instance and set its stepa_results.
+    batcher = StepAMessageResultBatcher()
+    batcher.stepa_results = [result1, result2]
+
+    # Serialize the data.
+    serialized = batcher.serialize_from_stepa_results()
+    print("Serialized buffer shape:", serialized.shape)
+
+    # Deserialize into a new instance.
+    new_batcher = StepAMessageResultBatcher()
+    new_batcher.deserialize(serialized)
+
+    data = new_batcher.get_data()
+    print("Deserialized Data:")
+    print("Question IDs:", data["question_ids"])
+    print("Input IDs:\n", data["input_ids"])
+    print("Text Embeds shape:", data["text_embeds"].shape)
+    print("Text Encoder Hidden States shape:", data["text_encoder_hidden_states"].shape)
+    print("Queries:", data["queries"])
+    
 if __name__ == "__main__":
-    test_list = []
-    b1 = PendingTextDataBatcher(100)
-    b1.question_ids = [1, 2, 3]
-    b1.text_sequence = ["hello", "world", "test"]
-    b1.input_ids = np.zeros((3, 32), dtype=np.int64)
-    b1.attention_mask = np.ones((3, 32), dtype=np.int64)
-    test_list.append(b1)
-    # print memory address of text_list[0]'s input_ids
-    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
-    print(f"addr of text_list : {id(test_list)}")
-    b2 = PendingTextDataBatcher(100)
-    b2.question_ids = [4, 5]
-    b2.text_sequence = ["hello", "world"]
-    b2.input_ids = np.zeros((2, 32), dtype=np.int64)
-    b2.attention_mask = np.ones((2, 32), dtype=np.int64)
-    test_list.append(b2)
-    # print memory address of text_list[0]'s input_ids
-    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
-    for i in range(100000):
-        temp_b = PendingTextDataBatcher(100)
-        temp_b.question_ids = [i]
-        temp_b.text_sequence = ["hello"]
-        temp_b.input_ids = np.zeros((1, 32), dtype=np.int64)
-        temp_b.attention_mask = np.ones((1, 32), dtype=np.int64)
-        test_list.append(temp_b)
-    print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
-    print(f"addr of text_list : {id(test_list)}")
+    test_StepAMessageResultBatcher()
+    # test_list = []
+    # b1 = PendingTextDataBatcher(100)
+    # b1.question_ids = [1, 2, 3]
+    # b1.text_sequence = ["hello", "world", "test"]
+    # b1.input_ids = np.zeros((3, 32), dtype=np.int64)
+    # b1.attention_mask = np.ones((3, 32), dtype=np.int64)
+    # test_list.append(b1)
+    # # print memory address of text_list[0]'s input_ids
+    # print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    # print(f"addr of text_list : {id(test_list)}")
+    # b2 = PendingTextDataBatcher(100)
+    # b2.question_ids = [4, 5]
+    # b2.text_sequence = ["hello", "world"]
+    # b2.input_ids = np.zeros((2, 32), dtype=np.int64)
+    # b2.attention_mask = np.ones((2, 32), dtype=np.int64)
+    # test_list.append(b2)
+    # # print memory address of text_list[0]'s input_ids
+    # print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    # for i in range(100000):
+    #     temp_b = PendingTextDataBatcher(100)
+    #     temp_b.question_ids = [i]
+    #     temp_b.text_sequence = ["hello"]
+    #     temp_b.input_ids = np.zeros((1, 32), dtype=np.int64)
+    #     temp_b.attention_mask = np.ones((1, 32), dtype=np.int64)
+    #     test_list.append(temp_b)
+    # print(f"add of text_list[0]: {test_list[0].input_ids.ctypes.data}")
+    # print(f"addr of text_list : {id(test_list)}")
 

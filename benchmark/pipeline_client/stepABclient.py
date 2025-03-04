@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-
+import warnings
+warnings.filterwarnings("ignore")
 import numpy as np
 import os, sys
 import struct
 import torch
-import json
-from collections import defaultdict
 from easydict import EasyDict
 from derecho.cascade.external_client import ServiceClientAPI
 from derecho.cascade.external_client import TimestampLogger
@@ -18,6 +17,7 @@ from flmr import (
 from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
+
 
 
 STEPA_SHARD_INDEX = 0
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         stepa_key = stepa_prefix + f"_{batch_idx}"
         tl.log(10000 ,batch_idx ,0 ,0 )
         print("herere3")
-        resA = capi.put(stepa_key, stepa_serialized_np.tobytes(),subgroup_type=subgroup_type,
+        resA = capi.put_nparray(stepa_key, stepa_serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
         print("herere4")
 
