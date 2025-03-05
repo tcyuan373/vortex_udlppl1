@@ -10,7 +10,7 @@ from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
 
-from serialize_utils import TextDataBatcher, StepAMessageResultBatcher, PendingTextDataBatcher, StepAResultBatcher
+from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTextDataBatcher
 from TextEncoder import TextEncoder
 
 
@@ -124,15 +124,13 @@ class StepAModelWorker:
             cur_input_ids = torch.as_tensor(batch.input_ids[:batch.num_pending], dtype=torch.long, device="cuda") 
             cur_attention_mask = torch.as_tensor(batch.attention_mask[:batch.num_pending], dtype=torch.long, device="cuda")
             text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(cur_input_ids, cur_attention_mask)
-            result_batch = StepAResultBatcher(text_embeddings.cpu().detach().numpy(),
-                                               text_encoder_hidden_states.cpu().detach().numpy(), 
-                                               batch.input_ids[:batch.num_pending],
-                                               batch.question_ids[:batch.num_pending], 
-                                               batch.text_sequence[:batch.num_pending],
-                                               batch.num_pending)
             
             # Appending to the sending buffer to be sent by the emit worker
-            self.parent.emit_worker.add_to_buffer(result_batch)
+            self.parent.emit_worker.add_to_buffer(batch.question_ids[:batch.num_pending], 
+                                                  batch.text_sequence[:batch.num_pending], 
+                                                  batch.input_ids[:batch.num_pending], 
+                                                  text_embeddings.cpu().detach().numpy(), 
+                                                  text_encoder_hidden_states.cpu().detach().numpy())
             print("added to send buffer")
             self.pending_batches[self.current_batch].reset()
 
@@ -145,7 +143,7 @@ class StepAEmitWorker:
         self.thread = None
         self.parent = parent
         self.my_thread_id = thread_id
-        self.send_buffer = []  # list of PendingTextDataBatcher
+        self.send_buffer = [StepAResultBatchManager() for _ in range(len(STEPA_NEXT_UDL_SHARDS))]  # list of PendingTextDataBatcher
         self.max_emit_batch_size = self.parent.max_emit_batch_size
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -165,61 +163,68 @@ class StepAEmitWorker:
             self.running = False
             self.cv.notify_all()
 
-    def add_to_buffer(self, stepAResultBatcher):
+    def add_to_buffer(self, question_ids, text_sequence, input_ids,
+                      text_embeddings, text_encoder_hidden_states):
+        '''
+        pass by object reference to avoid deep-copy
+        '''
         with self.cv:
-            self.send_buffer.append(stepAResultBatcher)
+            # use question_id to determine which shard to send to
+            for i in range(len(question_ids)):
+                shard_pos = question_ids[i] % len(STEPA_NEXT_UDL_SHARDS)
+                self.send_buffer[shard_pos].add_result(question_ids[i], 
+                                                       text_sequence[i], 
+                                                       input_ids[i].view(),
+                                                       text_embeddings[i].view(),
+                                                       text_encoder_hidden_states[i].view())
             self.cv.notify()
             
     def process_and_emit_results(self, to_send):
-        # slice the StepAResultBatcher into batch size of max_emit_batch_size
-        num_sent = 0
-        to_send_idx = 0
-        to_send_start_pos = [0 for _ in range(len(to_send))]
-        total_to_send = sum([x.num_queries for x in to_send])
-        while num_sent < total_to_send:
-            # Serialize the batch into StepAMessageResultBatcher
-            message_batch = StepAMessageResultBatcher()
-            message_batch.max_emit_batch_size = self.max_emit_batch_size
-            while to_send_idx < len(to_send) and message_batch.space_left() > 0:
-                start_pos = to_send_start_pos[to_send_idx]
-                cur_size = min(message_batch.space_left(), to_send[to_send_idx].num_queries - start_pos)
-                end_pos = start_pos + cur_size
-                message_batch.stepa_results.append(to_send[to_send_idx]) # use reference to avoid deep-copy its fields' data
-                message_batch.stepa_results_start_end_pos.append([start_pos, end_pos])
-                message_batch.batch_size += cur_size
-                if end_pos == to_send[to_send_idx].num_queries:
-                    to_send_idx += 1
-                else:
-                    to_send_start_pos[to_send_idx] = end_pos
-            # message_batch.stepa_results = to_send[num_sent:num_sent+batch_size]
-            message_batch_serialized = message_batch.serialize_from_stepa_results()
-            msg_id = self.parent.sent_msg_count
-            new_key = STEPA_NEXT_UDL_PREFIX + str(msg_id)
-            shard_pos = msg_id % len(STEPA_NEXT_UDL_SHARDS) # round robin to the dedicated shards
-            # TODO use put_nparray
-            self.parent.capi.put(new_key, message_batch_serialized.tobytes(), 
-                                    subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
-                                    subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
-                                    shard_index=STEPA_NEXT_UDL_SHARDS[shard_pos], 
-                                    message_id=msg_id, as_trigger=True, blocking=False) # async put
-            num_sent += message_batch.batch_size
-        if num_sent > 0:
-                print(f"sent {num_sent} resultA to next UDL")
+        for idx, batch_manager in enumerate(to_send):
+            if batch_manager.num_queries == 0:
+                continue
+            # serialize the batch_manager
+            num_sent = 0
+            cur_shard_id = STEPA_NEXT_UDL_SHARDS[idx]
+            while num_sent < batch_manager.num_queries:
+                serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
+                start_pos = num_sent
+                end_pos = num_sent + serialize_batch_size
+                serialized_batch = batch_manager.serialize(start_pos, end_pos)
+                new_key = STEPA_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
+                self.parent.sent_msg_count += 1
+                # TODO use put_nparray
+                self.parent.capi.put(new_key, serialized_batch.tobytes(), 
+                                        subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
+                                        subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
+                                        shard_index=cur_shard_id, 
+                                        message_id=0, as_trigger=True, blocking=False) # async put
+                num_sent += serialize_batch_size
+                print(f"StepA sent {serialize_batch_size} queries to shard {cur_shard_id}")
+                
+            print(f"StepA total sent {num_sent} queries next UDL")
         
     
     def main_loop(self):
         batch_wait_time = self.parent.batch_time_us/1000000
         while self.running:
             to_send = []
+            empty = True
             with self.cv:
-                if len(self.send_buffer) == 0:
+                for i in range(len(self.send_buffer)):
+                    if self.send_buffer[i].num_queries > 0:
+                        empty = False
+                        break
+                    
+                if empty:
                     self.cv.wait(timeout=batch_wait_time)
                 if not self.running:
                     break
                 
-                if not len(self.send_buffer) == 0:
+                if not empty:
                     to_send = self.send_buffer
-                    self.send_buffer = []
+                    # Below is shallow copy, to avoid deep copy of the data
+                    self.send_buffer = [StepAResultBatchManager() for _ in range(len(STEPA_NEXT_UDL_SHARDS))]
                     
             self.process_and_emit_results(to_send)
             
