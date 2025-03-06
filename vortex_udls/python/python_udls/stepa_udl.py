@@ -4,7 +4,6 @@ warnings.filterwarnings("ignore")
 import json
 import threading
 import torch
-from torch import Tensor
 
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
@@ -14,13 +13,12 @@ from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTex
 from TextEncoder import TextEncoder
 
 
-STEPA_NEXT_UDL_PREFIX = "/stepD/stepA_"
+STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPA_NEXT_UDL_SUBGROUP_INDEX = 0
 STEPA_NEXT_UDL_SHARDS = [2]
 
 STEPA_WORKER_INITIAL_PENDING_BATCHES = 10
-
 
 class StepAModelWorker:
     '''
@@ -193,8 +191,7 @@ class StepAEmitWorker:
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
                 new_key = STEPA_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
-                # TODO use put_nparray
-                self.parent.capi.put(new_key, serialized_batch.tobytes(), 
+                self.parent.capi.put_nparray(new_key, serialized_batch, 
                                         subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
                                         subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
                                         shard_index=cur_shard_id, 

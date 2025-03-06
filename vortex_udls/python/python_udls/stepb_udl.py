@@ -1,42 +1,224 @@
 #!/usr/bin/env python3
 import json
+import numpy as np
+import threading
+import torch
+
+from VisionEncoder import VisionEncoder
+
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
-import numpy as np
-import torch
-from torch import nn
-from flmr import FLMRConfig, FLMRVisionModel
-from transformers import AutoImageProcessor
-from step_C_modeling_mlp import StepC
-from serialize_utils import PixelValueBatcher
-from serialize_utils import VisionDataBatcher
 
+from VisionEncoder import VisionEncoder
+from serialize_utils import PixelValueBatcher, PendingVisionDataBatcher, StepBResultBatchManager
 
-STEPB_NEXT_UDL_SHARD_INDEX = 2
+STEPB_NEXT_UDL_PREFIX = "/stepD/resultB_"
+STEPB_WORKER_INITIAL_PENDING_BATCHES = 10
+STEPB_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
+STEPB_NEXT_UDL_SUBGROUP_INDEX = 0
 
-class FLMRMultiLayerPerceptron(nn.Module):
-    """
-    A simple multi-layer perceptron with an activation function. This can be used as the mapping network in the FLMR model.
-    """
+STEPB_NEXT_UDL_SHARDS = [2]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
-
-    def __init__(self, sizes, bias=True, act=nn.Tanh):
-        super(FLMRMultiLayerPerceptron, self).__init__()
-        layers = []
-        for i in range(len(sizes) - 1):
-            layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=bias))
-            if i < len(sizes) - 2:
-                layers.append(act())
-        self.model = nn.Sequential(*layers)
+class StepBModelWorker:
+    '''
+    This is a batcher for StepB execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.max_exe_batch_size = self.parent.max_exe_batch_size
+        self.batch_time_us = self.parent.batch_time_us
+        self.vision_encoder = VisionEncoder(self.parent.checkpoint_path, self.parent.local_encoder_path, self.parent.local_projection_path)
+        self.pending_batches = [PendingVisionDataBatcher(self.max_exe_batch_size) for _ in range(STEPB_WORKER_INITIAL_PENDING_BATCHES)]
         
+        self.current_batch = -1    # current batch idx that main is executing
+        self.next_batch = 0        # next batch idx to add new data
+        self.next_to_process = 0  
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+    
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+
+    def push_to_pending_batches(self, vision_data_batcher):
+        num_questions = vision_data_batcher.question_ids.shape[0]
+        question_added = 0
+        with self.cv:
+            while question_added < num_questions:
+                free_batch = self.next_batch
+                space_left = self.pending_batches[free_batch].space_left()
+                # Find the idx in the pending_batches to add the data
+                while space_left == 0:
+                    free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch == self.current_batch:
+                        free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch >= self.next_batch:
+                        break
+                    space_left = self.pending_batches[free_batch].space_left()
+                if space_left == 0:
+                    new_batch = PendingVisionDataBatcher(self.max_batch_size)
+                    self.pending_batches.append(new_batch)  
+                    free_batch = len(self.pending_batches) - 1
+                    space_left = self.pending_batches[free_batch].space_left()
+                self.next_batch = free_batch
+                question_start_idx = question_added
+                end_idx = self.pending_batches[free_batch].add_data(vision_data_batcher, question_start_idx)
+                question_added = end_idx
+                if self.pending_batches[free_batch].space_left() == 0:
+                    self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                    if self.next_batch == self.current_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+            self.cv.notify()
+            print("added to queue")
+            
+
+    def main_loop(self):
+        batch = None
+        while self.running:
+            if not batch is None:
+                batch.reset()
+            with self.cv:
+                self.current_batch = -1
+                if self.pending_batches[self.next_to_process].num_pending == 0:
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
+                    
+                if self.pending_batches[self.next_to_process].num_pending != 0:
+                    self.current_batch = self.next_to_process
+                    self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
+                    batch = self.pending_batches[self.current_batch]
+                    
+                    if self.current_batch == self.next_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    print("StepB found something to process")
+            if not self.running:
+                break
+            if self.current_batch == -1 or not batch:
+                continue
+            
+            print("StepB about to execute")
+            # Execute the batch
+            # TODO: use direct memory sharing via pointer instead of copying to the host
+            input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
+            vision_embeddings, vision_second_last_layer_hidden_states = self.vision_encoder.execVisionEncoder(input_tensor, batch.num_pending)
+            # TODO: directly batch in the GPU to avoid this GPU to host fetch 
+            self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
+                                                vision_second_last_layer_hidden_states.cpu().detach().numpy(),
+                                                batch.question_ids,
+                                                batch.num_pending)
+            print("added to send buffer")
+            self.pending_batches[self.current_batch].reset()
+
+
+class StepBEmitWorker:
+    '''
+    This is a batcher for StepB execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.send_buffer = [StepBResultBatchManager() for _ in range(len(STEPB_NEXT_UDL_SHARDS))]  # list of PendingTextDataBatcher
+        self.max_emit_batch_size = self.parent.max_emit_batch_size
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+    
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+    def add_to_buffer(self, vision_embeddings, vision_second_last_layer_hidden_states, question_ids, num_pending):
+        '''
+        pass by object reference to avoid deep-copy
+        '''
+        with self.cv:
+            for i in range(num_pending):
+                shard_pos = question_ids[i] % len(STEPB_NEXT_UDL_SHARDS)
+                self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
+                                                     vision_second_last_layer_hidden_states[i].view(), 
+                                                     question_ids[i].view())
+            self.cv.notify()
+            
+    def process_and_emit_results(self, to_send):
+        for idx, batch_manager in enumerate(to_send):
+            if batch_manager.num_queries == 0:
+                continue
+            # serialize the batch_manager
+            num_sent = 0
+            cur_shard_id = STEPB_NEXT_UDL_SHARDS[idx]
+            while num_sent < batch_manager.num_queries:
+                serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
+                start_pos = num_sent
+                end_pos = num_sent + serialize_batch_size
+                serialized_batch = batch_manager.serialize(start_pos, end_pos)
+                new_key = STEPB_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
+                self.parent.sent_msg_count += 1
+                self.parent.capi.put_nparray(new_key, serialized_batch, 
+                                        subgroup_type=STEPB_NEXT_UDL_SUBGROUP_TYPE, 
+                                        subgroup_index=STEPB_NEXT_UDL_SUBGROUP_INDEX, 
+                                        shard_index=cur_shard_id, 
+                                        message_id=0, as_trigger=True, blocking=False) # async put
+                num_sent += serialize_batch_size
+                print(f"StepB sent {serialize_batch_size} queries to shard {cur_shard_id}")
+                
+            print(f"StepB total sent {num_sent} queries next UDL")
         
+    
+    def main_loop(self):
+        batch_wait_time = self.parent.batch_time_us/1000000
+        while self.running:
+            to_send = []
+            empty = True
+            with self.cv:
+                for i in range(len(self.send_buffer)):
+                    if self.send_buffer[i].num_queries > 0:
+                        empty = False
+                        break
+                    
+                if empty:
+                    self.cv.wait(timeout=batch_wait_time)
+                if not self.running:
+                    break
+                
+                if not empty:
+                    to_send = self.send_buffer
+                    # Below is shallow copy, to avoid deep copy of the data
+                    self.send_buffer = [StepBResultBatchManager() for _ in range(len(STEPB_NEXT_UDL_SHARDS))]
+                    
+            self.process_and_emit_results(to_send)
+            
+        
+
+
 class StepBUDL(UserDefinedLogic):
     '''
-    ConsolePrinter is the simplest example showing how to use the udl
+    StepBUDL is the simplest example showing how to use the udl
     '''
     def __init__(self,conf_str):
         '''
@@ -47,127 +229,47 @@ class StepBUDL(UserDefinedLogic):
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
-        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         
-        self.checkpoint_path            = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.local_encoder_path         = '/mydata/EVQA_datasets/models/models_step_B_vision_encoder.pt'
-        self.local_projection_path      = '/mydata/EVQA_datasets/models/models_step_B_vision_projection.pt'
-        self.image_processor            = None
-        self.flmr_config                = None
-
-        self.query_vision_encoder       = None
-        self.query_vision_projection    = None
-        self.skiplist = []
-        self.device = None
-        self.stepc = StepC()
+        self.checkpoint_path = self.conf["checkpoint_path"]
+        self.local_encoder_path = self.conf["local_encoder_path"]
+        self.local_projection_path = self.conf["local_projection_path"]
         
-    def load_model_cpu(self):
-        self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
-        self.image_processor = AutoImageProcessor.from_pretrained('openai/clip-vit-large-patch14')
-        self.query_vision_encoder = FLMRVisionModel(self.flmr_config.vision_config)
-        self.query_vision_projection = FLMRMultiLayerPerceptron(
-                (
-                    self.flmr_config.vision_config.hidden_size,
-                    (self.flmr_config.dim * self.flmr_config.mapping_network_prefix_length) // 2,
-                    self.flmr_config.dim * self.flmr_config.mapping_network_prefix_length,
-                )
-            )
-        self.query_vision_encoder.load_state_dict(torch.load(self.local_encoder_path, weights_only=False))
-        self.query_vision_projection.load_state_dict(torch.load(self.local_projection_path, weights_only=False))
-    
-    def load_model_gpu(self):
-        self.query_vision_projection.cuda()
-        self.query_vision_encoder.cuda()
-        self.device = self.query_vision_encoder.device
+        self.max_exe_batch_size = int(self.conf.get("max_exe_batch_size", 16))
+        self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
+        self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
+        
+        self.model_worker = None
+        self.emit_worker = None
+        self.sent_msg_count = 0
+        
+        
+    def start_threads(self):
+        '''
+        Start the worker threads
+        '''
+        if not self.model_worker:
+            self.model_worker = StepBModelWorker(self, 1)
+            self.model_worker.start()
+            self.emit_worker = StepBEmitWorker(self, 2)
+            self.emit_worker.start()
         
     def ocdpo_handler(self,**kwargs):
         '''
         The off-critical data path handler
         '''
+        if not self.model_worker:
+            self.start_threads()
+            
         key = kwargs["key"]
         blob = kwargs["blob"]
         
-        new_batcher = PixelValueBatcher()
-        new_batcher.deserialize(blob)
-        data = new_batcher.get_data()
+        received_batch = PixelValueBatcher()
+        received_batch.deserialize(blob)
         
-        pv_np = np.copy(data["pixel_values"])
-        key_id = key[int(key.find('_'))+1:]
-        batch_id = int(key_id)
-        self.tl.log(20051, batch_id, 0, 0)
-        # print(f"GOT MY ID AS: {self.my_id}")
-        # list_of_images = deserialize_string_list(blob.tobytes())
-        # should be a 5D tensor of shape B * 1 * n_channel(3) * H * W
-        # reconstructed_np_array = np.frombuffer(blob, dtype=np.float32).reshape(-1, 1, 3, 224, 224)
-        # input_tensor = torch.Tensor(reconstructed_np_array)
+        self.model_worker.push_to_pending_batches(received_batch)
         
-        # print('==========Step B+C start loading model==========')
-
-        if self.query_vision_projection == None:
-            self.load_model_cpu()
-            self.stepc.load_model_cpu()
-            self.load_model_gpu()
-            self.stepc.load_model_gpu()
-            
-        input_tensor = torch.Tensor(pv_np).to(self.device)
-        # print(f"STEP B Got input tensor of shape: {input_tensor.shape}")
-        batch_size = input_tensor.shape[0]
-        # Forward the vision encoder
-        if len(input_tensor.shape) == 5:
-            # Multiple ROIs are provided
-            # merge the first two dimensions
-            input_tensor = input_tensor.reshape(
-                -1, input_tensor.shape[2], input_tensor.shape[3], input_tensor.shape[4]
-            )
-        vision_encoder_outputs = self.query_vision_encoder(input_tensor, output_hidden_states=True)
-        vision_embeddings = vision_encoder_outputs.last_hidden_state[:, 0]
-        vision_embeddings = self.query_vision_projection(vision_embeddings)
-        vision_embeddings = vision_embeddings.view(batch_size, -1, self.flmr_config.dim)
-    
-        vision_second_last_layer_hidden_states = vision_encoder_outputs.hidden_states[-2][:, 1:]
+        return
         
-        # print('==========Step B Finished ==========')        
-        transformer_mapping_input_feature = self.stepc.stepC_output(vision_second_last_layer_hidden_states)
-        # print(f'the shape of hs: {transformer_mapping_input_feature.shape} | and for ve: {vision_embeddings.shape}')
-        # print('==========Step C Finished ==========')
-        # ve_result = {}
-        # hs_result = {}
-        # ve_result['vision_embeddings'] = vision_embeddings.tolist()
-        # hs_result['transformer_mapping_input_feature'] = transformer_mapping_input_feature.tolist()
-        # veres_json_str = json.dumps(ve_result)
-        # veres_json_byte = veres_json_str.encode('utf-8')
-        # hsres_json_str = json.dumps(hs_result)
-        # hsres_json_byte = hsres_json_str.encode('utf-8')
-        stepb_batcher = VisionDataBatcher()
-        
-        ve = vision_embeddings.detach().cpu().numpy()
-        hs = transformer_mapping_input_feature.detach().cpu().numpy()
-        stepb_batcher.vision_embedding = ve
-        stepb_batcher.vision_hidden_states = hs
-        stepb_batcher.question_id = data["question_ids"].tolist()
-        stepb_bacher_np = stepb_batcher.serialize()
-        
-        prefix = "/stepD/stepB_"
-
-        # indices = [i for i, char in enumerate(key) if char == "/"]
-        # key_id = key[int(indices[-1]):]
-        
-        key = prefix + key_id
-        subgroup_type = "VolatileCascadeStoreWithStringKey"
-        subgroup_index = 0
-        
-        resve = self.capi.put(key,stepb_bacher_np.tobytes(),subgroup_type=subgroup_type,
-                      subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
-                      message_id=1, as_trigger=True, blocking=False)
-        
-        # reshs = self.capi.put(hs_key,hs,subgroup_type=subgroup_type,
-        #               subgroup_index=subgroup_index,shard_index=STEPB_NEXT_UDL_SHARD_INDEX,
-        #               message_id=1, as_trigger=True, blocking=False)
-        self.tl.log(20100, batch_id, 0, 0)
-        
-        if batch_id == 49:
-            self.tl.flush(f"node{self.my_id}_STEPB_udls_timestamp.dat")
-            print("STEPB TL flushed!!!")
         
     def __del__(self):
         '''

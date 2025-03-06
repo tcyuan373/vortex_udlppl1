@@ -90,19 +90,19 @@ def tokenize_inputs(examples, query_tokenizer, image_processor):
         examples["input_ids"] = encoding["input_ids"]
         examples["attention_mask"] = encoding["attention_mask"]
 
-        # pixel_values = []
-        # for img_path in examples["img_path"]:
+        pixel_values = []
+        for img_path in examples["img_path"]:
 
-        #     if img_path is None:
-        #         image = Image.new("RGB", (336, 336), color='black')
-        #     else:
-        #         image = Image.open(img_path).convert("RGB")
+            if img_path is None:
+                image = Image.new("RGB", (336, 336), color='black')
+            else:
+                image = Image.open(img_path).convert("RGB")
             
-        #     encoded = image_processor(image, return_tensors="pt")
-        #     pixel_values.append(encoded.pixel_values)
+            encoded = image_processor(image, return_tensors="pt")
+            pixel_values.append(encoded.pixel_values)
 
-        # pixel_values = torch.stack(pixel_values, dim=0)
-        # examples["pixel_values"] = pixel_values
+        pixel_values = torch.stack(pixel_values, dim=0)
+        examples["pixel_values"] = pixel_values
         return examples
     
 def add_path_prefix_in_img_path(example, prefix):
@@ -120,14 +120,14 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 1
+    batch_size = 2
     num_batches = 10
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
-    image_root_dir = "/mnt/nvme0/yy354/EVQA_datasets"
-    use_split = "test"
+    image_root_dir = "/mnt/nvme0/yy354"
+    use_split = "train"
     ds_dir = "/mnt/nvme0/yy354/EVQA_data/EVQA_data/"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
@@ -136,13 +136,13 @@ if __name__ == "__main__":
                                                                     subfolder="query_tokenizer")
     image_processor = AutoImageProcessor.from_pretrained(image_processor_name)
     
-    
+    # TODO: change to actual range at perf test
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select(i for i in range(999))
+                                            })[use_split].select(i for i in range(166000, 166999, 1)) 
     # preprocess datasets so that we have 
-    # ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
+    ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
     ds = ds.map(
         tokenize_inputs,
@@ -153,46 +153,41 @@ if __name__ == "__main__":
     )
     print("herere0")
     for i in range(0, len(ds), batch_size):
-        idx = torch.randint(0, 555, (1,)).item()
+        # TODO: change to the actual at perf test
+        idx = torch.randint(0, 99, (1,)).item()
         batch = ds[idx : idx + batch_size]
         batch_idx = i // batch_size
         # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
         if batch_idx >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
-        print("herere1")
-        # print(f"Check for input ids: {torch.LongTensor(batch['input_ids']).shape} | \n attention_mask: {torch.Tensor(batch['attention_mask']).shape}")
-        stepa_serializer = TextDataBatcher()
         
+        qids = []
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
             question_id = int(qid[uds_idx+1:])
-            stepa_serializer.question_ids.append(question_id)
-        print("herere2")
+            qids.append(question_id)
+        
+        stepa_serializer = TextDataBatcher()
+        stepa_serializer.question_ids = qids
         stepa_serializer.text_sequence = batch["text_sequence"]
         stepa_serializer.input_ids = np.asarray(batch["input_ids"])
         stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()
         stepa_key = stepa_prefix + f"_{batch_idx}"
-        tl.log(10000 ,batch_idx ,0 ,0 )
-        print("herere3")
+        # tl.log(10000 ,batch_idx ,0 ,0 )
         resA = capi.put_nparray(stepa_key, stepa_serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
-        print("herere4")
 
 
-        # stepb_key = stepb_prefix + f"_{batch_idx}"
-        # serializer = PixelValueBatcher()
-        # serializer.question_ids = np.zeros(batch_size)
-        # for i, qid in enumerate(batch["question_id"]):
-        #     uds_idx =  int(qid.find("_"))
-        #     question_id = int(qid[uds_idx+1:])
-        #     serializer.question_ids[i] = question_id
-        # serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-        # serialized_np = serializer.serialize()
-        # # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
-        # resB = capi.put(stepb_key, serialized_np.tobytes(),subgroup_type=subgroup_type,
-        #             subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
+        stepb_key = stepb_prefix + f"_{batch_idx}"
+        serializer = PixelValueBatcher()
+        serializer.question_ids = np.asarray(qids,dtype=np.int64)
+        serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
+        serialized_np = serializer.serialize()
+        # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
+        resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
+                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
         # time.sleep(2)
         
     tl.flush("client_timestamp.dat")

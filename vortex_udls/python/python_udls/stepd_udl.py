@@ -1,204 +1,270 @@
 #!/usr/bin/env python3
 import numpy as np
 import json
+import threading
+import torch
+
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
-import torch
-from torch import Tensor, nn
-from transformers import BertConfig
-from transformers.models.bert.modeling_bert import BertEncoder
-from flmr import FLMRConfig, FLMRQueryEncoderTokenizer
-from serialize_utils import StepDMessageBatcher, StepAResultBatchManager, VisionDataBatcher
+
+from TransformerMappingNetwork import MLP, TransformerMappingNetwork
+from serialize_utils import (StepCDIntermediateResult, 
+                            StepDMessageBatcher,StepBResultBatchManager, 
+                            StepAResultBatchManager, PendingStepCDDataBatcher)
 
 STEPD_NEXT_UDL_SHARD_INDEX = 0
+STEPCD_NEXT_UDL_SHARDS = [2]
+# Initial number of pending batches smaller, because they are allocated on GPU, 
+# if the max_exec_batch_size is 16, it takes 3 * 18MB memory on GPU
+STEPCD_WORKER_INITIAL_PENDING_BATCHES = 3
+MAX_STEPCD_WORKER_PENDING_BATCHES = 8
 
-class IntermediateResult:
-    def __init__(self):
-        self._question_id       = None
-        self._queries           = None
-        self._input_ids         = None
-        self._text_embeddings   = None
-        self._text_encoder_hidden_states = None
-        self._vision_embeddings = None                   
-        self._transformer_mapping_input_feature = None
-        
-    def collected_all(self):
-        has_all = self._queries != None and \
-            self._input_ids != None and \
-            self._text_embeddings != None and \
-            self._text_encoder_hidden_states != None and \
-            self._vision_embeddings != None and\
-            self._transformer_mapping_input_feature != None and\
-            self._question_id != None
-            
-        return has_all
-
-
-class StepDUDL(UserDefinedLogic):
+class StepCDModelWorker:
     '''
-    ConsolePrinter is the simplest example showing how to use the udl
+    This is a batcher for StepA execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.mlp_model = MLP(self.parent.checkpoint_path, self.parent.local_stepc_model_path)
+        self.transformer_mapping_model = TransformerMappingNetwork(self.parent.checkpoint_path,
+                                                                   self.parent.local_tf_mapping_path, 
+                                                                   self.parent.local_tf_mapping_output_path)
+    
+        self.max_exe_batch_size = self.parent.max_exe_batch_size
+        self.batch_time_us = self.parent.batch_time_us
+        self.pending_batches = [PendingStepCDDataBatcher(self.max_exe_batch_size) for _ in range(STEPCD_WORKER_INITIAL_PENDING_BATCHES)]
+
+        
+        self.current_batch = -1    # current batch idx that main is executing
+        self.next_batch = 0        # next batch idx to add new data
+        self.next_to_process = 0  
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+        
+        
+
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+
+    def push_to_pending_batches(self, intermediate_result):
+        '''
+        Adding the intermediate result one-by-one since they are aggregated one-by-one at the UDL side
+        '''
+        with self.cv:
+            free_batch = self.next_batch
+            space_left = self.pending_batches[free_batch].space_left()
+            # Find the idx in the pending_batches to add the data
+            while space_left == 0:
+                free_batch = (free_batch + 1) % len(self.pending_batches)
+                if free_batch == self.current_batch:
+                    free_batch = (free_batch + 1) % len(self.pending_batches)
+                if free_batch >= self.next_batch:
+                    break
+                space_left = self.pending_batches[free_batch].space_left()
+            if space_left == 0:
+                # Need to create new batch, if all the pending_batches are full
+                new_batch = PendingStepCDDataBatcher(self.max_batch_size)
+                self.pending_batches.append(new_batch)  
+                free_batch = len(self.pending_batches) - 1
+                space_left = self.pending_batches[free_batch].space_left()
+                
+            # add the intermediate result to the pending batch
+            self.pending_batches[free_batch].add_data(intermediate_result)
+            
+            self.next_batch = free_batch
+            #  if we complete filled the buffer, cycle to the next
+            if self.pending_batches[free_batch].space_left() == 0:
+                self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                if self.next_batch == self.current_batch:
+                    self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                    
+            self.cv.notify()
+            print("added one query input to queue")
+            
+
+    def main_loop(self):
+        batch = None
+        while self.running:
+            if not batch is None:
+                batch.reset()
+            with self.cv:
+                self.current_batch = -1
+                if self.pending_batches[self.next_to_process].num_pending == 0:
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
+                    
+                if self.pending_batches[self.next_to_process].num_pending != 0:
+                    self.current_batch = self.next_to_process
+                    self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
+                    batch = self.pending_batches[self.current_batch]
+                    
+                    if self.current_batch == self.next_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    print("StepCD found something to process")
+            if not self.running:
+                break
+            if self.current_batch == -1 or not batch:
+                continue
+            
+            print("StepCD about to execute")
+            
+            # Execute the batch
+            transformer_mapping_input_features = self.mlp_model.execMLP(batch.vision_second_last_layer_hidden_states[:batch.num_pending,:,:])
+            query_embeddings = self.transformer_mapping_model.execTransformerMappingNetwork(
+                                batch.input_ids[:batch.num_pending,:], 
+                                batch.text_embeddings[:batch.num_pending,:,:], 
+                                batch.text_encoder_hidden_states[:batch.num_pending,:,:], 
+                                batch.vision_embeddings[:batch.num_pending,:,:],
+                                transformer_mapping_input_features)
+            result = query_embeddings.cpu().detach().numpy()
+            print(f"stepCD finish execution query_emebdding shape: {result.shape}")
+            
+            # self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
+            #                                     vision_second_last_layer_hidden_states.cpu().detach().numpy(),
+            #                                     batch.question_ids,
+            #                                     batch.num_pending)
+            # print("added to send buffer")
+            # self.pending_batches[self.current_batch].reset()
+
+
+class StepCDEmitWorker:
+    '''
+    This is a batcher for StepA execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.send_buffer = [StepAResultBatchManager() for _ in range(len(STEPCD_NEXT_UDL_SHARDS))]  # list of PendingTextDataBatcher
+        self.max_emit_batch_size = self.parent.max_emit_batch_size
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
+    
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+    def add_to_buffer(self, question_ids, text_sequence, input_ids,
+                      text_embeddings, text_encoder_hidden_states):
+        '''
+        pass by object reference to avoid deep-copy
+        '''
+        pass
+            
+    def process_and_emit_results(self, to_send):
+        pass
+        
+    
+    def main_loop(self):
+        pass
+            
+        
+
+
+class StepCDUDL(UserDefinedLogic):
+    '''
+    StepCD performs aggregation, then MLP and TransformerMappingNetwork on the aggregated results
     '''
     def __init__(self,conf_str):
         '''
         Constructor
         '''
-        super(StepDUDL,self).__init__(conf_str)
+        super(StepCDUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
         # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
-        # modeling configs
-        self.flmr_config = None
-        self.skiplist = []
-        self.query_tokenizer = None
-       
-        self.transformer_mapping_cross_attention_length = 32
-        self.vision_encoder_embedding_size = 1024
-        self.late_interaction_embedding_size = 128
-        self.checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
-        self.transformer_mapping_config_base = 'bert-base-uncased'
-        self.local_tf_mapping_path = '/mydata/EVQA_datasets/models/models_step_D_transformer_mapping.pt'
-        self.local_tf_mapping_output_path = '/mydata/EVQA_datasets/models/models_step_D_transformer_mapping_output.pt'
-        self.transformer_mapping_network = None
-        self.transformer_mapping_output_linear = None
         
-        self.mask_instruction = False
+        self.checkpoint_path = self.conf["checkpoint_path"]
+        self.local_stepc_model_path = self.conf["local_stepc_model_path"]
+        self.local_tf_mapping_path = self.conf["local_tf_mapping_path"]
+        self.local_tf_mapping_output_path = self.conf["local_tf_mapping_output_path"]
+
+        self.max_exe_batch_size = self.conf["max_exe_batch_size"]
+        self.batch_time_us = self.conf["batch_time_us"]
+        self.max_emit_batch_size = self.conf["max_emit_batch_size"]
         
-        # Kep track of collected intermediate results: {query_id0: IntermediateResult, query_id2:{} ...}
+        # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}
         
+        self.model_worker = None
+        self.emit_worker = None
+        self.sent_msg_count = 0
         
-    def load_model_cpu(self):
-        self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
-        transformer_mapping_config = BertConfig.from_pretrained(self.transformer_mapping_config_base)
-        transformer_mapping_config.is_decoder = True
-        transformer_mapping_config.add_cross_attention = True
-        transformer_mapping_config.num_hidden_layers = 1
 
-        self.transformer_mapping_network = BertEncoder(transformer_mapping_config)
-        self.transformer_mapping_network.load_state_dict(torch.load(self.local_tf_mapping_path, weights_only=True))
-        self.transformer_mapping_output_linear = nn.Linear(
-            transformer_mapping_config.hidden_size, self.late_interaction_embedding_size
-        )
-        self.transformer_mapping_output_linear.load_state_dict(torch.load(self.local_tf_mapping_output_path, weights_only=True))
-        self.query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(
-                    self.checkpoint_path, 
-                    text_config=self.flmr_config.text_config, 
-                    subfolder="query_tokenizer")
-        if self.flmr_config.mask_instruction_token is not None:
-            self.mask_instruction = True
-            # obtain the token id of the instruction token
-            self.instruction_token_id = self.query_tokenizer.encode(
-                self.flmr_config.mask_instruction_token, add_special_tokens=False
-            )[0]
-        else:
-            self.mask_instruction = False
+    def append_result_to_collector(self, key, blob):
         
-    def mask(self, input_ids, skiplist):
-        return [[(x not in skiplist) and (x != 0) for x in d] for d in input_ids.cpu().tolist()]
-    
-    
-    def query_mask(self, input_ids, skiplist):
-        if not self.mask_instruction:
-            return self.mask(input_ids, skiplist)
-
-        # find the position of end of instruction in input_ids
-        # mask the tokens before the position
-        sep_id = self.instruction_token_id
-        sep_positions = torch.argmax((input_ids == sep_id).int(), dim=1).tolist()
-        # if any of the positions is lower than 1, set to 1
-        for i, x in enumerate(sep_positions):
-            if x < 1:
-                sep_positions[i] = 1
-        mask = [
-            [
-                (x not in skiplist) and (x != 0) and (index > sep_positions[seq_index] or index < 2)
-                for index, x in enumerate(d)
-            ]
-            for seq_index, d in enumerate(input_ids.cpu().tolist())
-        ]
-        return mask
+        step_A_idx = key.find("resultA") 
+        step_B_idx = key.find("resultB")
         
-    def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
-        """
-        Invert an attention mask (e.g., switches 0. and 1.).
-
-        Args:
-            encoder_attention_mask (`torch.Tensor`): An attention mask.
-
-        Returns:
-            `torch.Tensor`: The inverted attention mask.
-        """
-        if encoder_attention_mask.dim() == 3:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-        if encoder_attention_mask.dim() == 2:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-        # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow
-        # /transformer/transformer_layers.py#L270
-        # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
-        # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=encoder_attention_mask.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(encoder_attention_mask.dtype).min
-
-        return encoder_extended_attention_mask
-    
-    
-    def load_model_gpu(self):
-        self.transformer_mapping_network.cuda()
-        self.transformer_mapping_output_linear.cuda()
-        
-    
-        
-    def proces_queries(self,
-                       input_ids,
-                       text_embeddings,
-                       text_encoder_hidden_states,
-                       vision_embeddings,
-                       transformer_mapping_input_features,
-                       ):
-        if self.transformer_mapping_network == None:
-            # print('==========start loading model cpu==========')
-            self.load_model_cpu()
+        if step_A_idx != -1:
+            stepa_serializer = StepAResultBatchManager()
+            stepa_serializer.deserialize(blob)
+            for idx, qid in enumerate(stepa_serializer.question_ids):
+                if not self.collected_intermediate_results.get(qid):
+                    self.collected_intermediate_results[qid] = StepCDIntermediateResult()
+                # TODO: currently copying, because the execution needs to aggregate results from both stepA and stepB
+                #       and the original data may be overwritten in the RDMA buffer
+                self.collected_intermediate_results[qid]._question_id = qid
+                self.collected_intermediate_results[qid]._np_text_sequence_bytes = np.copy(stepa_serializer.np_text_sequence_bytes[idx])
+                self.collected_intermediate_results[qid]._input_ids = torch.Tensor(stepa_serializer.input_ids[idx])
+                self.collected_intermediate_results[qid]._text_embeddings = torch.Tensor(stepa_serializer.text_embeds[idx])
+                self.collected_intermediate_results[qid]._text_encoder_hidden_states = torch.Tensor(stepa_serializer.text_encoder_hidden_states[idx])
+                
+                if self.collected_intermediate_results[qid].collected_all():
+                    self.model_worker.push_to_pending_batches(self.collected_intermediate_results[qid])
+                    self.tl.log(30000, qid, 3, 0)
+                    del self.collected_intermediate_results[qid]
+                    
+            # print("--- StepD has deserialized stepA data ---")
+            # stepa_serializer.print_shape()
             
-            # print('==========start loading model gpu==========')
-            self.load_model_gpu()
-            
-        
-        mask = torch.tensor(self.query_mask(input_ids, skiplist=self.skiplist)).unsqueeze(2).float().cuda()
-        text_embeddings = text_embeddings.to(mask.device) * mask
-        encoder_mask = torch.ones_like(mask).to(mask.device, dtype=mask.dtype)
-        if text_encoder_hidden_states.shape[1] > self.transformer_mapping_cross_attention_length:
-            text_encoder_hidden_states = text_encoder_hidden_states[:, :self.transformer_mapping_cross_attention_length]
-            encoder_mask = encoder_mask[:, :self.transformer_mapping_cross_attention_length]
-        # Obtain cross attention mask
-        encoder_extended_attention_mask = self.invert_attention_mask(encoder_mask.squeeze(-1))
-        # Pass through the transformer mapping
-        
-        
-        # ENCODER hidden states: Encoder_bsize, Encoder_seqLen, _
-        # ENCODER attention mask: ones_like(encoder_hidden_states)
-
-        transformer_mapping_outputs = self.transformer_mapping_network(
-            transformer_mapping_input_features.to(mask.device),
-            encoder_hidden_states=text_encoder_hidden_states.to(mask.device),
-            encoder_attention_mask=encoder_extended_attention_mask.to(mask.device),
-        )
-        transformer_mapping_output_features = transformer_mapping_outputs.last_hidden_state
-        # Convert the dimension to FLMR dim
-        transformer_mapping_output_features = self.transformer_mapping_output_linear(
-            transformer_mapping_output_features
-        )
-        # Merge with the vision embeddings
-        
-        vision_embeddings = torch.cat([vision_embeddings.to(mask.device), transformer_mapping_output_features], dim=1)
-        
-        Q = torch.cat([text_embeddings, vision_embeddings], dim=1)
-        query_embeddings = torch.nn.functional.normalize(Q, p=2, dim=2).detach().cpu()
-        return query_embeddings
+        elif step_B_idx != -1:
+            stepb_batcher = StepBResultBatchManager()
+            stepb_batcher.deserialize(blob)
+            for idx, qid in enumerate(stepb_batcher.question_ids):
+                if not self.collected_intermediate_results.get(qid):
+                    self.collected_intermediate_results[qid] = StepCDIntermediateResult()
+                self.collected_intermediate_results[qid]._question_id = qid
+                self.collected_intermediate_results[qid]._vision_embeddings = torch.Tensor(stepb_batcher.vision_embedding[idx])
+                self.collected_intermediate_results[qid]._vision_second_last_layer_hidden_states = torch.Tensor(stepb_batcher.vision_second_last_layer_hidden_states[idx])
+                self.tl.log(30000, qid, 2, 0)
+                
+                if self.collected_intermediate_results[qid].collected_all():
+                    self.model_worker.push_to_pending_batches(self.collected_intermediate_results[qid])
+                    self.tl.log(30000, qid, 3, 0)
+                    del self.collected_intermediate_results[qid]
+                
+            # print("--- StepD has deserialized stepB data ---")
+            # stepb_batcher.print_shape()
         
         
     def ocdpo_handler(self, **kwargs):
@@ -207,58 +273,18 @@ class StepDUDL(UserDefinedLogic):
             # text_embeddings                         # step A      B * 32 * 128
             # text_encoder_hidden_states              # step A      B * 32 * 768
             # vision_embeddings                       # step B      B * 32 * 128
-            # transformer_mapping_input_features)     # step B (used to be C, now merged) B * 256 * 768
-
-        
-        # now we have the input formalized, proceed with the model serving
+            # vision_second_last_layer_hidden_states)     # step B  B * 256 * 1024
+        if not self.model_worker:
+            self.model_worker = StepCDModelWorker(self, 0)
+            self.model_worker.start()
+            self.emit_worker = StepCDEmitWorker(self, 0)
+            self.emit_worker.start()
+            
         key = kwargs["key"]
         blob = kwargs["blob"]
+        self.append_result_to_collector(key, blob)
         
-        step_A_idx = key.find("stepA") 
-        step_B_idx = key.find("stepB")
-        
-        # print(f'Step D UDL got key: {key}')
-        
-        uds_idx = key.find("_")
-        batch_id = int(key[uds_idx+1:])
-
-        if not self.collected_intermediate_results.get(batch_id):
-            self.collected_intermediate_results[batch_id] = IntermediateResult()
-        if step_A_idx != -1:
-            self.tl.log(30000, batch_id, 1, 0)
-
-            stepa_serializer = StepAResultBatchManager()
-            stepa_serializer.deserialize(blob)
-            blob_data = stepa_serializer.get_data()
-            input_ids_np = np.copy(blob_data["input_ids"])
-            self.collected_intermediate_results[batch_id]._question_id = blob_data['question_ids']
-            self.collected_intermediate_results[batch_id]._queries = blob_data['text_sequence']
-            self.collected_intermediate_results[batch_id]._input_ids = torch.Tensor(input_ids_np)
-            self.collected_intermediate_results[batch_id]._text_embeddings = torch.Tensor(blob_data['text_embeds'])
-            self.collected_intermediate_results[batch_id]._text_encoder_hidden_states = torch.Tensor(blob_data['text_encoder_hidden_states'])
-            print("StepD has deserialized stepA data")
-            stepa_serializer.print_shape()
-        elif step_B_idx != -1:
-            self.tl.log(30000, batch_id, 2, 0)
-            stepb_batcher = VisionDataBatcher()
-            stepb_batcher.deserialize(blob)
-            blob_data = stepb_batcher.get_data()
-            self.collected_intermediate_results[batch_id]._vision_embeddings = torch.Tensor(blob_data["vision_embedding"])
-            self.collected_intermediate_results[batch_id]._transformer_mapping_input_feature = torch.Tensor(blob_data["vision_hidden_states"])
-            
-        if not self.collected_intermediate_results[batch_id].collected_all():
-            return
-        
-        self.tl.log(30010, batch_id, 0, 0)
-        cur_batch = self.collected_intermediate_results[batch_id]
-        # call step E functions using  self.collected_intermediate_results[batch_id]
-        batch_query_embeddings = self.proces_queries(   
-                                    cur_batch._input_ids,
-                                    cur_batch._text_embeddings,
-                                    cur_batch._text_encoder_hidden_states,
-                                    cur_batch._vision_embeddings,
-                                    cur_batch._transformer_mapping_input_feature,
-                                        )
+        return
         
         # print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
 

@@ -37,7 +37,7 @@ class IntermediateResult:
 
 class StepEUDL(UserDefinedLogic):
     '''
-    ConsolePrinter is the simplest example showing how to use the udl
+    StepEUDL is the simplest example showing how to use the udl
     '''
     def __init__(self,conf_str):
         '''
@@ -45,7 +45,6 @@ class StepEUDL(UserDefinedLogic):
         '''
         super(StepEUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.searcher = None
         self.index_root_path        = '/mydata/EVQA_datasets/index/'
         self.index_experiment_name  = 'EVQA_train_split/'

@@ -1,6 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 import numpy as np
+import torch
 
 '''
 Serialization helper classes and functions for Pipeline1, FLMR pipeline 
@@ -380,9 +381,9 @@ class StepAResultBatchManager:
     def __init__(self):
         self.num_queries = 0
         self.question_ids = []      # List[int] of length batch_size.
-        self.text_sequence = []     # List[str] of length batch_size.
         
         # Variables used for serialize
+        self.text_sequence = []     # List[str] of length batch_size.
         self.input_ids_list = []       # list of (np.ndarray of shape (1, 32), dtype=np.int64).
         self.text_embeds_list = []     # list of (np.ndarray of shape (1, 32, 128), dtype=np.float32).
         self.text_encoder_hidden_states_list = []  # list of (np.ndarray of shape (1, 32, 768), dtype=np.float32).
@@ -390,6 +391,7 @@ class StepAResultBatchManager:
         
         # Variables used for deserialize
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        self.np_text_sequence_bytes = []     # List of np.ndarray that is utf-8 encoded text_sequence, only decode it when asked
         self.input_ids = None       # np.ndarray of shape (batch_size, 32), dtype=np.int64.
         self.text_embeds = None     # np.ndarray of shape (batch_size, 32, 128), dtype=np.float32.
         self.text_encoder_hidden_states = None  # np.ndarray of shape (batch_size, 32, 768), dtype=np.float32.
@@ -539,20 +541,25 @@ class StepAResultBatchManager:
         offset += hidden_states_size
 
         # --- Read queries variable segment ---
-        text_sequence = []
         for m in metadata_array:
             start = int(m["query_offset"])
             length = int(m["query_length"])
             # Extract query bytes from the entire buffer using the absolute offset.
             query_bytes = buffer[start:start+length]
-            text_sequence.append(query_bytes.tobytes().decode("utf-8"))
+            # text_sequence.append(query_bytes.tobytes().decode("utf-8"))
+            self.np_text_sequence_bytes.append(query_bytes)
 
         # Restore fields.
         self.question_ids = qids
         self.input_ids = input_ids
         self.text_embeds = text_embeds
         self.text_encoder_hidden_states = text_encoder_hidden_states
-        self.text_sequence = text_sequence
+        # self.decode_text_sequence()  # Only decode the text sequence when needed
+    
+    def decode_text_sequence(self):
+        for idx in range(len(self.np_text_sequence_bytes)):
+            self.text_sequence.append(self.np_text_sequence_bytes[idx].tobytes().decode("utf-8"))
+            
         
     def print_shape(self):
         print("--- StepAMessageResultBatcher shape info ---")
@@ -560,28 +567,23 @@ class StepAResultBatchManager:
         print(f"input_ids: {self.input_ids.shape}")
         print(f"text_embeds: {self.text_embeds.shape}")
         print(f"text_encoder_hidden_states: {self.text_encoder_hidden_states.shape}")
+        self.decode_text_sequence()
         print(f"text_sequence: {len(self.text_sequence)}")
-
-    def get_data(self):
-        return {
-            "question_ids": self.question_ids,
-            "input_ids": self.input_ids,
-            "text_embeds": self.text_embeds,
-            "text_encoder_hidden_states": self.text_encoder_hidden_states,
-            "text_sequence": self.text_sequence
-        }
 
 
 
 # ===============  Class and Serializer for Step B Image encoder ===============
 
 class PixelValueBatcher:
+    '''
+    Batcher for client to send a batch of pixel values to stepB UDL
+    '''
     def __init__(self):
         # Expected shape: (batch_size, 1, 3, 224, 224) and dtype=np.float32.
         self.pixel_values: np.ndarray = None
         # Query IDs as a NumPy array of shape (batch_size,) and dtype=np.int64.
         self.question_ids: np.ndarray = None
-        # Internal buffer (serialized data)
+        # Serialized bytes buffer.
         self._bytes: np.ndarray = None
 
     def serialize(self) -> np.ndarray:
@@ -592,39 +594,28 @@ class PixelValueBatcher:
         """
         if self.pixel_values is None or self.question_ids is None:
             raise ValueError("Both pixel_values and question_ids must be provided.")
-        
-        # Ensure question_ids is a NumPy array.
-        question_ids_array = np.asarray(self.question_ids, dtype=np.int64)
-        batch_size = question_ids_array.shape[0]
-        
+        batch_size = self.question_ids.shape[0]
         if self.pixel_values.shape[0] != batch_size:
             raise ValueError("The first dimension of pixel_values must match the number of question_ids.")
         
         # Calculate sizes.
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes
-        question_ids_size = question_ids_array.nbytes       # batch_size * 8 bytes
+        header_size = np.dtype(np.uint32).itemsize   # 4 bytes
+        question_ids_size = self.question_ids.nbytes   # batch_size * 8 bytes
         pixel_values_size = self.pixel_values.nbytes  # batch_size * 1 * 3 * 224 * 224 * 4
-        
         total_size = header_size + question_ids_size + pixel_values_size
+        
         # Allocate one contiguous buffer.
         buffer = np.empty(total_size, dtype=np.uint8)
+        
+        # Write to buffer
         offset = 0
-
-        # --- Write header: batch_size ---
         header_arr = np.array([batch_size], dtype=np.uint32)
-        # Create a view into header_arr as uint8 (zero-copy view) and copy into the buffer slice.
         buffer[offset:offset + header_size] = header_arr.view(np.uint8)
         offset += header_size
-
-        # --- Write question_ids ---
-        # Use a view of the question_ids array as uint8.
-        buffer[offset:offset + question_ids_size] = question_ids_array.view(np.uint8)
+        buffer[offset:offset + question_ids_size] = self.question_ids.view(np.uint8)
         offset += question_ids_size
-
-        # --- Write pixel_values ---
         buffer[offset:offset + pixel_values_size] = self.pixel_values.view(np.uint8).reshape(-1)
         offset += pixel_values_size
-
         self._bytes = buffer
         return buffer
 
@@ -643,31 +634,215 @@ class PixelValueBatcher:
         header_size = np.dtype(np.uint32).itemsize  # 4 bytes
         batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
         offset += header_size
+        
+        self.question_ids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset).reshape(batch_size)    
+        offset += self.question_ids.nbytes
 
-        # --- Read question_ids ---
-        question_ids_count = batch_size  # one int64 per example
-        question_ids = np.frombuffer(buffer, dtype=np.int64, count=question_ids_count, offset=offset)
-        offset += question_ids.nbytes  # or batch_size * np.dtype(np.int64).itemsize
-
-        # --- Read pixel_values ---
         pixel_shape = (batch_size, 1, 3, 224, 224)
         num_pixels = np.prod(pixel_shape)
-        # Create a zero-copy view and then reshape it
-        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=num_pixels, offset=offset).reshape(pixel_shape)
-        offset += num_pixels * np.dtype(np.float32).itemsize
+        self.pixel_values = np.frombuffer(buffer, dtype=np.float32, count=num_pixels, offset=offset).reshape(pixel_shape)
+        
 
-        # Assign fields (these are zero-copy views into the original buffer)
-        self.question_ids = question_ids
-        self.pixel_values = pixel_values
+class PendingVisionDataBatcher():
+    '''
+    Super batch of PixelValueBatcher, used for model runtime batch execution
+    '''
+    def __init__(self, batch_size: int):
+        self.max_batch_size = batch_size
+        self.num_pending = 0
+        # TODO: when using GPU RDMA direct, below fields should be allocated in CUDA memory
+        self.pixel_values = np.empty((self.max_batch_size, 1, 3, 224, 224), dtype=np.float32)
+        self.question_ids = np.empty((self.max_batch_size,), dtype=np.int64)
 
-    def get_data(self):
-        return {
-            "question_ids": self.question_ids,
-            "pixel_values": self.pixel_values
-        }
+    def space_left(self):
+        return self.max_batch_size - self.num_pending
+    
+    def add_data(self, PixelValueBatcher, start_pos):
+        num_to_add = min(self.space_left(), PixelValueBatcher.question_ids.shape[0] - start_pos)
+        end_pos = start_pos + num_to_add
+        self.pixel_values[self.num_pending:self.num_pending + num_to_add] = PixelValueBatcher.pixel_values[start_pos:end_pos]
+        self.question_ids[self.num_pending:self.num_pending + num_to_add] = PixelValueBatcher.question_ids[start_pos:end_pos]
+        self.num_pending += num_to_add
+        return end_pos
+    
+    def reset(self):
+        '''
+        Reset the fields
+        '''
+        self.pixel_values.fill(0)
+        self.question_ids = np.empty((self.max_batch_size,), dtype=np.int64)
+        self.num_pending = 0
 
+   
+class StepBResultBatchManager:
+    '''
+    Batcher to send to the next UDL
+    '''
+    def __init__(self):
+        self.num_queries = 0
+        
+        # Variables used for serialize
+        self.question_ids_list = []      # List[int] of (np.ndarray of shape (1,), dtype=np.int64)
+        self.vision_embedding_list = []  # List[np.ndarray] of (np.ndarray of shape (1, 32, 128), dtype=np.float32)
+        self.vision_second_last_layer_hidden_states_list = [] # List[np.ndarray] of (np.ndarray of shape (1, 256, 1024), dtype=np.float32)
+        
+        # Variables used for deserialize
+        self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        self.question_ids: np.ndarray = None
+        self.vision_embedding: np.ndarray = None    # np.ndarray of shape (batch_size, 32, 128), dtype=np.float32.
+        self.vision_second_last_layer_hidden_states: np.ndarray = None  # np.ndarray of shape (batch_size, 256, 1024), dtype=np.float32
+    
+    def add_result(self, vision_embedding, vision_second_last_layer_hidden_states, question_id):
+        self.question_ids_list.append(question_id)
+        self.vision_embedding_list.append(vision_embedding)
+        self.vision_second_last_layer_hidden_states_list.append(vision_second_last_layer_hidden_states)
+        self.num_queries += 1
+        
+
+    def serialize(self, start_pos, end_pos):
+        """
+        Serializes the following fields into a contiguous byte buffer:
+          - Header: 4 bytes for batch_size (uint32).
+          - question_id: fixed-size array of int64 (batch_size,).
+          - vision_embedding: raw bytes of the array (batch_size, 32, 128), dtype np.float32.
+          - vision_hidden_states: raw bytes of the array (batch_size, 256, 1024), dtype np.float32.
+        """
+        # Compute the total size
+        batch_size = end_pos - start_pos
+        qids_size = batch_size * np.dtype(np.int64).itemsize
+        embedding_size = batch_size * 32 * 128 * np.dtype(np.float32).itemsize
+        hidden_states_size = batch_size * 256 * 1024 * np.dtype(np.float32).itemsize
+        total_size = 4 + qids_size + embedding_size + hidden_states_size
+        
+        # Allocate one contiguous buffer.
+        serialized_buffer = np.zeros(total_size, dtype=np.uint8)
+        # Determine segment positions
+        qids_offset = 4
+        embedding_offset = qids_offset + qids_size
+        hidden_states_offset = embedding_offset + embedding_size
+        # Get the array reference to write
+        qid_array = np.frombuffer(serialized_buffer[qids_offset:qids_offset + qids_size],
+                                    dtype=np.int64)
+        embedding_array = np.frombuffer(serialized_buffer[embedding_offset:embedding_offset + embedding_size],
+                                        dtype=np.float32).reshape((batch_size, 32, 128))
+        hidden_states_array = np.frombuffer(serialized_buffer[hidden_states_offset:hidden_states_offset + hidden_states_size],
+                                            dtype=np.float32).reshape((batch_size, 256, 1024))
+        
+        # Write Header: batch_size (as uint32)
+        np.frombuffer(serialized_buffer[:4], dtype=np.uint32)[0] = batch_size
+        # Write the data
+        written_counter = 0  
+        for manager_idx in range(start_pos, end_pos):
+            qid_array[written_counter] = self.question_ids_list[manager_idx]
+            embedding_array[written_counter] = self.vision_embedding_list[manager_idx]
+            hidden_states_array[written_counter] = self.vision_second_last_layer_hidden_states_list[manager_idx]
+            written_counter += 1
+        return serialized_buffer
+        
+
+    def deserialize(self, data: np.ndarray):
+        """
+        Deserializes the contiguous byte buffer back into the original fields.
+        Expected layout (in order):
+          - Header: 4 bytes (uint32: batch_size)
+          - question_id: array of int64, shape (batch_size,)
+          - vision_embedding: array of float32, shape (batch_size, 32, 128)
+          - vision_hidden_states: array of float32, shape (batch_size, 256, 1024)
+        """
+        self._bytes = data
+        buffer = data
+        offset = 0
+
+        # --- Read header ---
+        batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
+        offset += 4
+        
+        qids_size = batch_size * np.dtype(np.int64).itemsize
+        embedding_size = batch_size * 32 * 128 * np.dtype(np.float32).itemsize
+        
+        self.question_ids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset)
+        offset += qids_size
+        self.vision_embedding = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 32 * 128, offset=offset).reshape((batch_size, 32, 128))
+        offset += embedding_size
+        self.vision_second_last_layer_hidden_states = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 256 * 1024, offset=offset).reshape((batch_size, 256, 1024))
+
+    def print_shape(self):
+        print("--- StepBResultBatchManager shape info ---")
+        print(f"question_ids: {self.question_ids.shape}")
+        print(f"vision_embedding: {self.vision_embedding.shape}")
+        print(f"vision_hidden_states: {self.vision_second_last_layer_hidden_states.shape}")
 
 # ===============  Class and Serializer for Step D cross attention  ===============
+
+class StepCDIntermediateResult:
+    def __init__(self):
+        self._question_id       = None
+        self._np_text_sequence_bytes  = None
+        self._input_ids         = None   # torch.Tensor on cpu, shape (1, 32)
+        self._text_embeddings   = None   # torch.Tensor on cpu, shape (1, 32, 128)
+        self._text_encoder_hidden_states = None   # torch.Tensor on cpu, shape (1, 32, 768)
+        self._vision_embeddings = None   # torch.Tensor on cpu, shape (1, 32, 128)
+        self._vision_second_last_layer_hidden_states = None    # torch.Tensor on cpu, shape (1, 256, 1024)
+        
+    def collected_all(self):
+        has_all = self._np_text_sequence_bytes is not None and \
+            self._input_ids is not None and \
+            self._text_embeddings is not None and \
+            self._text_encoder_hidden_states is not None and \
+            self._vision_embeddings is not None and\
+            self._vision_second_last_layer_hidden_states is not None and\
+            self._question_id is not None
+            
+        return has_all
+
+class PendingStepCDDataBatcher():
+    '''
+    Super batch of StepDMessageBatcher, used for model runtime batch execution
+    '''
+    def __init__(self, batch_size: int):
+        self.max_batch_size = batch_size
+        self.num_pending = 0
+        
+        # Metadata, not used in computation, so could be in discontiguous memory
+        self.question_ids = []     
+        self.np_text_sequence_bytes = []
+        
+        # Inputs for step C and D
+        # At initialization allocate memories on GPU
+        self.input_ids = torch.empty((self.max_batch_size, 32), dtype=torch.long, device="cuda")
+        self.text_embeddings = torch.empty((self.max_batch_size, 32, 128), dtype=torch.float32, device="cuda")
+        self.text_encoder_hidden_states = torch.empty((self.max_batch_size, 32, 768), dtype=torch.float32, device="cuda")
+        self.vision_embeddings = torch.empty((self.max_batch_size, 32, 128), dtype=torch.float32, device="cuda")        
+        self.vision_second_last_layer_hidden_states = torch.empty((self.max_batch_size, 256, 1024), dtype=torch.float32, device="cuda")
+
+    def space_left(self):
+        return self.max_batch_size - self.num_pending
+    
+    def add_data(self, intermediate_result: StepCDIntermediateResult):
+        self.question_ids.append(intermediate_result._question_id) # no copy here using reference
+        self.np_text_sequence_bytes.append(intermediate_result._np_text_sequence_bytes) # no copy here using reference
+        
+        # Copy each tensor into the preallocated GPU tensors
+        self.input_ids[self.num_pending].copy_(intermediate_result._input_ids.squeeze(0).to("cuda"))
+        self.text_embeddings[self.num_pending].copy_(intermediate_result._text_embeddings.squeeze(0).to("cuda"))
+        self.text_encoder_hidden_states[self.num_pending].copy_(intermediate_result._text_encoder_hidden_states.squeeze(0).to("cuda"))
+        self.vision_embeddings[self.num_pending].copy_(intermediate_result._vision_embeddings.squeeze(0).to("cuda"))
+        self.vision_second_last_layer_hidden_states[self.num_pending].copy_(intermediate_result._vision_second_last_layer_hidden_states.squeeze(0).to("cuda"))
+
+        self.num_pending += 1
+    
+    def reset(self):
+        '''
+        Reset the fields
+        '''
+        self.question_ids = []
+        self.np_text_sequence_bytes = []
+        self.input_ids.fill_(0)
+        self.text_embeddings.fill_(0)
+        self.text_encoder_hidden_states.fill_(0)
+        self.vision_embeddings.fill_(0)
+        self.vision_second_last_layer_hidden_states.fill_(0)
+        self.num_pending = 0
 
 class StepDMessageBatcher:
     def __init__(self):
@@ -818,111 +993,6 @@ class StepDMessageBatcher:
             "queries": self.queries
         }
 
-
-class VisionDataBatcher:
-    def __init__(self):
-        # Fields must have the same batch size.
-        self.question_id = []           # List[int] of length batch_size.
-        self.vision_embedding = None    # np.ndarray of shape (batch_size, 32, 128), dtype=np.float32.
-        self.vision_hidden_states = None  # np.ndarray of shape (batch_size, 256, 768), dtype=np.float32.
-        self._bytes: np.ndarray = np.array([], dtype=np.uint8)
-
-    def serialize(self) -> np.ndarray:
-        """
-        Serializes the following fields into a contiguous byte buffer:
-          - Header: 4 bytes for batch_size (uint32).
-          - question_id: fixed-size array of int64 (batch_size,).
-          - vision_embedding: raw bytes of the array (batch_size, 32, 128), dtype np.float32.
-          - vision_hidden_states: raw bytes of the array (batch_size, 256, 768), dtype np.float32.
-        """
-        if self.vision_embedding is None or self.vision_hidden_states is None:
-            raise ValueError("Both vision_embedding and vision_hidden_states must be provided.")
-        
-        batch_size = self.vision_embedding.shape[0]
-        if self.vision_hidden_states.shape[0] != batch_size:
-            raise ValueError("The first dimension (batch_size) must match for both arrays.")
-        if not self.question_id or len(self.question_id) != batch_size:
-            raise ValueError("question_id must be provided as a list of ints with length equal to batch_size.")
-        
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes.
-        qid_size = batch_size * np.dtype(np.int64).itemsize  # Fixed field: question_id.
-        embedding_size = self.vision_embedding.nbytes
-        hidden_states_size = self.vision_hidden_states.nbytes
-
-        total_size = header_size + qid_size + embedding_size + hidden_states_size
-        
-        # Allocate one contiguous buffer.
-        buffer = np.zeros(total_size, dtype=np.uint8)
-        offset = 0
-
-        # --- Write header: batch_size (uint32) ---
-        np.frombuffer(buffer[:header_size], dtype=np.uint32)[0] = batch_size
-        offset += header_size
-
-        # --- Write question_id field ---
-        # Convert question_id list to np.array of int64 and write via zero-copy view.
-        qid_array = np.array(self.question_id, dtype=np.int64)
-        buffer[offset:offset+qid_size] = qid_array.view(np.uint8).reshape(-1)
-        offset += qid_size
-
-        # --- Write vision_embedding ---
-        buffer[offset:offset+embedding_size] = self.vision_embedding.view(np.uint8).reshape(-1)
-        offset += embedding_size
-
-        # --- Write vision_hidden_states ---
-        buffer[offset:offset+hidden_states_size] = self.vision_hidden_states.view(np.uint8).reshape(-1)
-        offset += hidden_states_size
-
-        self._bytes = buffer
-        return buffer
-
-    def deserialize(self, data: np.ndarray):
-        """
-        Deserializes the contiguous byte buffer back into the fields.
-        Expected layout (in order):
-          - Header: 4 bytes (uint32: batch_size).
-          - question_id: array of int64, shape (batch_size,).
-          - vision_embedding: array of float32 with shape (batch_size, 32, 128).
-          - vision_hidden_states: array of float32 with shape (batch_size, 256, 768).
-        After deserialization, question_id is converted to a Python list.
-        """
-        self._bytes = data
-        buffer = data
-        offset = 0
-
-        # --- Read header ---
-        header_size = np.dtype(np.uint32).itemsize
-        batch_size = int(np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0])
-        offset += header_size
-
-        # --- Read question_id field ---
-        qid_size = batch_size * np.dtype(np.int64).itemsize
-        qid_array = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset)
-        question_id = qid_array.tolist()  # Convert to Python list.
-        offset += qid_size
-
-        # --- Read vision_embedding ---
-        embedding_size = batch_size * 32 * 128 * np.dtype(np.float32).itemsize
-        vision_embedding = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 32 * 128, offset=offset)
-        vision_embedding = vision_embedding.reshape((batch_size, 32, 128))
-        offset += embedding_size
-
-        # --- Read vision_hidden_states ---
-        hidden_states_size = batch_size * 256 * 768 * np.dtype(np.float32).itemsize
-        vision_hidden_states = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 256 * 768, offset=offset)
-        vision_hidden_states = vision_hidden_states.reshape((batch_size, 256, 768))
-        offset += hidden_states_size
-
-        self.question_id = question_id
-        self.vision_embedding = vision_embedding
-        self.vision_hidden_states = vision_hidden_states
-
-    def get_data(self):
-        return {
-            "question_id": self.question_id,
-            "vision_embedding": self.vision_embedding,
-            "vision_hidden_states": self.vision_hidden_states
-        }
 
 
 
