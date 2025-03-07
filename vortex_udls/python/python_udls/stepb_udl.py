@@ -74,7 +74,7 @@ class StepBModelWorker:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
-                    new_batch = PendingVisionDataBatcher(self.max_batch_size)
+                    new_batch = PendingVisionDataBatcher(self.max_exe_batch_size)
                     self.pending_batches.append(new_batch)  
                     free_batch = len(self.pending_batches) - 1
                     space_left = self.pending_batches[free_batch].space_left()

@@ -18,8 +18,8 @@ from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
 
-image_root_dir = "/mnt/nvme0/ty373/"
-ds_dir = "/mnt/nvme0/ty373/EVQA_data/"
+image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
+ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"
 STEPA_SHARD_INDEX = 0
 STEPB_SHARD_INDEX = 1
 STEPA_SUBGROUP_INDEX = 0
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 2
-    num_batches = 10
+    num_batches = 250
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -137,8 +137,8 @@ if __name__ == "__main__":
     
     # TODO: change to actual range at perf test
     ds = load_dataset('parquet', data_files ={  
-                                            'train' : ds_dir + '/train-00000-of-00001.parquet',
-                                            'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
+                                            'train' : ds_dir + 'train-00000-of-00001.parquet',
+                                            'test'  : ds_dir + 'test-00000-of-00001-2.parquet',
                                             })[use_split].select(i for i in range(166000, 166999, 1)) 
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
