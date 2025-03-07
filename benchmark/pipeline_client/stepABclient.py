@@ -152,11 +152,11 @@ if __name__ == "__main__":
         num_proc=16,
     )
     print("herere0")
-    for i in range(0, len(ds), batch_size):
+    for idx in range(0, len(ds), batch_size):
         # TODO: change to the actual at perf test
-        idx = torch.randint(0, 99, (1,)).item()
+        # idx = torch.randint(0, 99, (1,)).item()
         batch = ds[idx : idx + batch_size]
-        batch_idx = i // batch_size
+        batch_idx = idx // batch_size
         # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
         if batch_idx >= num_batches:    
             # print(f"Batch no. {i // batch_size} reached!  Now break")
@@ -191,11 +191,15 @@ if __name__ == "__main__":
         # time.sleep(2)
         
     tl.flush("client_timestamp.dat")
-        # time.sleep(15)
+        # time.sleep(1000)
     # for i in range(10):
     #     key = prefix + f"_{i}"
     #     res = capi.put(key, serialize_string_list(value),subgroup_type=subgroup_type,
     #                 subgroup_index=subgroup_index,shard_index=shard_index, message_id=1)
+
+
+    # sleep(1000)
+  
 
 
 

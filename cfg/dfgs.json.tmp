@@ -137,7 +137,8 @@
                         "index_experiment_name":"EVQA_train_split/",
                         "index_name":"EVQA_PreFLMR_ViT-L",
                         "max_exe_batch_size":16,
-                        "batch_time_us":100
+                        "batch_time_us":100,
+                        "flush_qid":166019
                     }],
                 "destinations": [{}]
             }
@@ -157,6 +158,24 @@
                         "module":"monolithic",
                         "entry_class":"Monolithic_UDL",
                         "udl_conf_key1":"sample config key 1"
+                    }],
+                "destinations": [{}]
+            }
+        ]
+    },
+    {
+        "id": "300000000-3ccc-12c3-3333-000000033333",
+        "desc": "Logging purpose graph",
+        "graph": [
+            {
+                "pathname": "/flush_log",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"flush_log_udl",
+                        "entry_class":"FlushLogUDL"
                     }],
                 "destinations": [{}]
             }

@@ -114,7 +114,10 @@ class StepEModelWorker:
             queries = dict(zip(batch.question_ids, batch.text_sequence))
             rank_dict = self.text_encoder.process_search(queries, batch.query_embeddings[:batch.num_pending])
             print(f"~~~~ Finished StepE processed {batch.num_pending} queries ~~~~")
-            print(f"Ranking: {rank_dict.keys()}")
+            if self.parent.flush_qid in batch.question_ids:
+                print(f"StepE finished No.{self.parent.flush_qid} queries")
+            
+            # self.parent.capi.put_nparray("finish", np.array(batch.question_ids), subgroup_type=0, subgroup_index=0, shard_index=0, message_id=1)
             
 
 
@@ -137,6 +140,7 @@ class StepEUDL(UserDefinedLogic):
         self.index_name = self.conf["index_name"]
         self.max_exe_batch_size = self.conf["max_exe_batch_size"]
         self.batch_time_us = self.conf["batch_time_us"]
+        self.flush_qid = self.conf["flush_qid"]
         self.model_worker = None
     
     def start_threads(self):
@@ -159,53 +163,7 @@ class StepEUDL(UserDefinedLogic):
         new_batcher = StepDMessageBatcher()
         new_batcher.deserialize(blob)
         self.model_worker.push_to_pending_batches(new_batcher)
-        return
         
-        # bytes_obj           = blob.tobytes()
-        # json_str_decoded    = bytes_obj.decode('utf-8')
-        # cluster_result      = json.loads(json_str_decoded)
-        queries_texts       = cluster_result['queries']
-        query_embeddings    = cluster_result['query_embeddings']
-        question_ids        = cluster_result['question_ids']
-        bsize               = None   #using the best perf config, same as the FLMR paper setting
-        
-        
-        # queries = {question_id[i]: queries_texts[i] for i in range(len(queries_texts))}
-        assert len(queries_texts) == len(question_ids)
-        queries = dict(zip(question_ids, queries_texts))
-        
-        step_D_idx = key.find('stepD')
-        uds_idx = key.find("_")
-        batch_id = int(key[uds_idx+1:])
-        
-        
-        self.tl.log(40000, batch_id, 0, 0)
-        ranking = self.process_search(queries, query_embeddings, bsize)
-        
-        # if not self.collected_intermediate_results.get(batch_id):
-        #     self.collected_intermediate_results[batch_id] = IntermediateResult()
-            
-        # if step_D_idx != -1:
-        #     self.collected_intermediate_results[batch_id]._queries = queries
-        #     self.collected_intermediate_results[batch_id]._query_embeddings = query_embeddings
-            
-        # if not self.collected_intermediate_results[batch_id].has_all():
-        #     return
-            
-        # ranking = self.process_search(self.collected_intermediate_results[batch_id]._queries, 
-        #                               self.collected_intermediate_results[batch_id]._query_embeddings,
-        #                               bsize)
-
-        # print('==========Finished Searching==========')
-        # print(f"Got queries: {self.collected_intermediate_results[batch_id]._queries}")
-        # print(f'Got a ranking dictionary for batch {batch_id}: {ranking}')
-        self.tl.log(40100, batch_id, 0, 0)
-        
-        # erase the batch id dict{} 
-        # del self.collected_intermediate_results[batch_id]
-        if batch_id == 49:
-            self.tl.flush(f"node{self.my_id}_STEPE_udls_timestamp.dat")
-            print("Time Log Flushed!!!")
         
         
     def __del__(self):
