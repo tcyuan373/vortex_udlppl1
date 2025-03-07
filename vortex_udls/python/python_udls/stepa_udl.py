@@ -4,7 +4,6 @@ warnings.filterwarnings("ignore")
 import json
 import threading
 import torch
-from torch import Tensor
 
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
@@ -14,13 +13,12 @@ from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTex
 from TextEncoder import TextEncoder
 
 
-STEPA_NEXT_UDL_PREFIX = "/stepD/stepA_"
+STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPA_NEXT_UDL_SUBGROUP_INDEX = 0
 STEPA_NEXT_UDL_SHARDS = [2]
 
 STEPA_WORKER_INITIAL_PENDING_BATCHES = 10
-
 
 class StepAModelWorker:
     '''
@@ -91,7 +89,7 @@ class StepAModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                         
             self.cv.notify()
-            print("added to queue")
+            # print("added to queue")
             
 
     def main_loop(self):
@@ -111,27 +109,25 @@ class StepAModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
-                    print("found something to process")
+                    # print("found something to process")
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
                 continue
             
-            print("about to execute")
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
             cur_input_ids = torch.as_tensor(batch.input_ids[:batch.num_pending], dtype=torch.long, device="cuda") 
             cur_attention_mask = torch.as_tensor(batch.attention_mask[:batch.num_pending], dtype=torch.long, device="cuda")
             text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(cur_input_ids, cur_attention_mask)
-            
+            print(f"StepA processed {batch.num_pending} queries")
             # Appending to the sending buffer to be sent by the emit worker
             self.parent.emit_worker.add_to_buffer(batch.question_ids[:batch.num_pending], 
                                                   batch.text_sequence[:batch.num_pending], 
                                                   batch.input_ids[:batch.num_pending], 
                                                   text_embeddings.cpu().detach().numpy(), 
                                                   text_encoder_hidden_states.cpu().detach().numpy())
-            print("added to send buffer")
             self.pending_batches[self.current_batch].reset()
 
 
@@ -193,14 +189,13 @@ class StepAEmitWorker:
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
                 new_key = STEPA_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
-                # TODO use put_nparray
-                self.parent.capi.put(new_key, serialized_batch.tobytes(), 
+                self.parent.capi.put_nparray(new_key, serialized_batch, 
                                         subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
                                         subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
                                         shard_index=cur_shard_id, 
                                         message_id=0, as_trigger=True, blocking=False) # async put
                 num_sent += serialize_batch_size
-                print(f"StepA sent {serialize_batch_size} queries to shard {cur_shard_id}")
+                # print(f"StepA sent {serialize_batch_size} queries to shard {cur_shard_id}")
                 
             print(f"StepA total sent {num_sent} queries next UDL")
         
