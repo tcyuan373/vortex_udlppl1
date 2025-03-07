@@ -56,13 +56,9 @@ class TextEncoder:
         if self.query_text_encoder_linear == None:
             self.load_model_cpu()
             self.load_model_gpu()
-        print(f"input_id shape: {input_ids.shape} | attention_mask shape: {attention_mask.shape}")
+
         text_encoder_outputs = self.query_text_encoder(input_ids=input_ids,attention_mask=attention_mask,)
         text_encoder_hidden_states = text_encoder_outputs[0]
         text_embeddings = self.query_text_encoder_linear(text_encoder_hidden_states)
-        print('==========Step A finished forward pass==========')
-        print(f'text embedding of shape: \t {text_embeddings.shape}')
-        print(f'input ids of shape: \t\t {text_embeddings.shape}')
-        print(f'hidden sates of shape:\t{text_encoder_hidden_states.shape}')
-        
+
         return text_embeddings, text_encoder_hidden_states

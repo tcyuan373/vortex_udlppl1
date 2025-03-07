@@ -144,7 +144,7 @@ if __name__ == "__main__":
             uds_idx =  int(qid.find("_"))
             question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
-            tl.log(10000, int(question_id), 0, 0)
+            tl.log(1000, int(question_id), 0, 0)
         batcher.attention_mask = np.array(batch["attention_mask"])
         batcher.input_ids = np.array(batch["input_ids"])
         batcher.text_sequence = batch["question"] 
@@ -153,7 +153,6 @@ if __name__ == "__main__":
         
         res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
-        
         time.sleep(5)
         
     tl.flush("mono_client_timestamp.dat")

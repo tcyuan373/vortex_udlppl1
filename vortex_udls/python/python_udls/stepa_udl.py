@@ -56,6 +56,8 @@ class StepAModelWorker:
 
 
     def push_to_pending_batches(self, text_data_batcher):
+        for qid in text_data_batcher.question_ids:
+            self.parent.tl.log(10000, qid, 0, 0)
         num_questions = len(text_data_batcher.question_ids)
         question_added = 0
         with self.cv:
@@ -89,7 +91,6 @@ class StepAModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                         
             self.cv.notify()
-            # print("added to queue")
             
 
     def main_loop(self):
@@ -109,19 +110,22 @@ class StepAModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
-                    # print("found something to process")
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
                 continue
             
+            
             # Execute the batch
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(10030, qid, 0, 0)
             # TODO: use direct memory sharing via pointer instead of copying to the host
             # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
             cur_input_ids = torch.as_tensor(batch.input_ids[:batch.num_pending], dtype=torch.long, device="cuda") 
             cur_attention_mask = torch.as_tensor(batch.attention_mask[:batch.num_pending], dtype=torch.long, device="cuda")
             text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(cur_input_ids, cur_attention_mask)
-            print(f"StepA processed {batch.num_pending} queries")
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(10031, qid, 0, 0)
             # Appending to the sending buffer to be sent by the emit worker
             self.parent.emit_worker.add_to_buffer(batch.question_ids[:batch.num_pending], 
                                                   batch.text_sequence[:batch.num_pending], 
@@ -182,6 +186,10 @@ class StepAEmitWorker:
             # serialize the batch_manager
             num_sent = 0
             cur_shard_id = STEPA_NEXT_UDL_SHARDS[idx]
+            
+            for qid in batch_manager.question_ids[:batch_manager.num_queries]:
+                self.parent.tl.log(10100, qid, 0, 0)
+            
             while num_sent < batch_manager.num_queries:
                 serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
                 start_pos = num_sent
@@ -189,15 +197,14 @@ class StepAEmitWorker:
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
                 new_key = STEPA_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
+                
                 self.parent.capi.put_nparray(new_key, serialized_batch, 
                                         subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
                                         subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
                                         shard_index=cur_shard_id, 
                                         message_id=0, as_trigger=True, blocking=False) # async put
                 num_sent += serialize_batch_size
-                # print(f"StepA sent {serialize_batch_size} queries to shard {cur_shard_id}")
                 
-            print(f"StepA total sent {num_sent} queries next UDL")
         
     
     def main_loop(self):
@@ -236,7 +243,6 @@ class StepAUDL(UserDefinedLogic):
         '''
         super(StepAUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        # print(f"StepAUDL constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()

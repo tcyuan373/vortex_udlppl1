@@ -98,7 +98,6 @@ class StepCDModelWorker:
                     self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                     
             self.cv.notify()
-            print("added one query input to queue")
             
 
     def main_loop(self):
@@ -124,6 +123,8 @@ class StepCDModelWorker:
                 continue
                         
             # Execute the batch
+            for qid in batch.question_ids:
+                self.parent.tl.log(30030, qid, 0, 0)
             transformer_mapping_input_features = self.mlp_model.execMLP(batch.vision_second_last_layer_hidden_states[:batch.num_pending,:,:])
             query_embeddings = self.transformer_mapping_model.execTransformerMappingNetwork(
                                 batch.input_ids[:batch.num_pending,:], 
@@ -132,7 +133,10 @@ class StepCDModelWorker:
                                 batch.vision_embeddings[:batch.num_pending,:,:],
                                 transformer_mapping_input_features)
             query_embeddings = query_embeddings.cpu().detach().numpy()
-            print(f"stepCD finish execution query_emebdding shape: {query_embeddings.shape}")
+            
+            for qid in batch.question_ids:
+                self.parent.tl.log(30031, qid, 0, 0)
+            
             self.parent.emit_worker.add_to_buffer(batch.question_ids, 
                                                              query_embeddings, 
                                                              batch.np_text_sequence_bytes, 
@@ -209,7 +213,6 @@ class StepCDEmitWorker:
                     if self.next_batch == self.current_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.send_buffer)
             self.cv.notify()
-            # print(f"added {num_pending} query result to send buffer")
         
     
     def main_loop(self):
@@ -239,13 +242,16 @@ class StepCDEmitWorker:
             # send to a evenly chosen shard
             shard_idx = STEPD_NEXT_UDL_SHARDS[(self.sent_batch_counter % len(STEPD_NEXT_UDL_SHARDS))]
             new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
+            
+            for qid in batch.question_ids:
+                self.parent.tl.log(30100, qid, 0, 0)
+                
             self.parent.capi.put_nparray(new_key, batch_np, 
-                                 subgroup_type=STEPD_NEXT_UDL_SUBGROUP_TYPE,
+                                subgroup_type=STEPD_NEXT_UDL_SUBGROUP_TYPE,
                                 subgroup_index=STEPD_NEXT_UDL_SUBGROUP_INDEX, 
                                 shard_index=shard_idx, 
                                 message_id=1, as_trigger=True, blocking=False)
             self.sent_batch_counter += 1
-            print(f"StepCD sent {batch.num_queries} queries")
             self.send_buffer[self.current_batch].reset()
             
             
@@ -262,7 +268,6 @@ class StepCDUDL(UserDefinedLogic):
         '''
         super(StepCDUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
@@ -302,6 +307,7 @@ class StepCDUDL(UserDefinedLogic):
             stepa_serializer = StepAResultBatchManager()
             stepa_serializer.deserialize(blob)
             for idx, qid in enumerate(stepa_serializer.question_ids):
+                self.tl.log(30000, qid, 1, 0)
                 if not self.collected_intermediate_results.get(qid):
                     self.collected_intermediate_results[qid] = StepCDIntermediateResult()
                 # TODO: currently copying, because the execution needs to aggregate results from both stepA and stepB
@@ -317,27 +323,25 @@ class StepCDUDL(UserDefinedLogic):
                     self.tl.log(30000, qid, 3, 0)
                     del self.collected_intermediate_results[qid]
                     
-            # print("--- StepD has deserialized stepA data ---")
-            # stepa_serializer.print_shape()
+
             
         elif step_B_idx != -1:
             stepb_batcher = StepBResultBatchManager()
             stepb_batcher.deserialize(blob)
             for idx, qid in enumerate(stepb_batcher.question_ids):
+                self.tl.log(30000, qid, 2, 0)
                 if not self.collected_intermediate_results.get(qid):
                     self.collected_intermediate_results[qid] = StepCDIntermediateResult()
                 self.collected_intermediate_results[qid]._question_id = qid
                 self.collected_intermediate_results[qid]._vision_embeddings = torch.Tensor(stepb_batcher.vision_embedding[idx])
                 self.collected_intermediate_results[qid]._vision_second_last_layer_hidden_states = torch.Tensor(stepb_batcher.vision_second_last_layer_hidden_states[idx])
-                self.tl.log(30000, qid, 2, 0)
                 
                 if self.collected_intermediate_results[qid].collected_all():
                     self.model_worker.push_to_pending_batches(self.collected_intermediate_results[qid])
                     self.tl.log(30000, qid, 3, 0)
                     del self.collected_intermediate_results[qid]
                 
-            # print("--- StepD has deserialized stepB data ---")
-            # stepb_batcher.print_shape()
+
         
         
     def ocdpo_handler(self, **kwargs):
@@ -352,41 +356,14 @@ class StepCDUDL(UserDefinedLogic):
             
         key = kwargs["key"]
         blob = kwargs["blob"]
+        
         self.append_result_to_collector(key, blob)
         
-        return
         
-        # print(f"Found batch query embeddings of shape: {batch_query_embeddings.shape}")
 
-        self.tl.log(30011, batch_id, 0, 0)
-        # self.collected_intermediate_results.erase(batch_id)
         
-        # result = {}
-        # result['queries'] = self.collected_intermediate_results[batch_id]._queries
-        # result['query_embeddings'] = batch_query_embeddings.tolist()
-        # result['question_id'] = self.collected_intermediate_results[batch_id]._question_id
-        # res_json_str = json.dumps(result)
-        # res_json_byte = res_json_str.encode('utf-8')
-        
-        stepd_batcher = StepDMessageBatcher()
-        stepd_batcher.queries = self.collected_intermediate_results[batch_id]._queries
-        stepd_batcher.query_embeddings = batch_query_embeddings.cpu().detach().numpy()
-        stepd_batcher.question_ids = self.collected_intermediate_results[batch_id]._question_id
-        stepd_batcher_np = stepd_batcher.serialize()
-        
-        subgroup_type = "VolatileCascadeStoreWithStringKey"
-        subgroup_index = 0
-        
-        res = self.capi.put(f"/stepE/stepD_{batch_id}", stepd_batcher_np.tobytes(), subgroup_type=subgroup_type,
-                subgroup_index=subgroup_index,shard_index=STEPD_NEXT_UDL_SHARD_INDEX, message_id=1, as_trigger=True, blocking=False)
 
-        self.tl.log(30020, batch_id, 0, 0)
-        
-        if batch_id == 49:
-            self.tl.flush(f"node{self.my_id}_STEPD_udls_timestamp.dat")
-            print("StepD TL flushed!!!")
-        # garbage cleaning via emit and del
-        del self.collected_intermediate_results[batch_id]
+
         
     def __del__(self):
         '''

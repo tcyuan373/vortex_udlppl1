@@ -119,9 +119,8 @@ class MonoModelWorker:
                                                    cur_pixel_values,
                                                    cur_question_ids,
                                                    cur_text_sequence)
-            print(f"MONO processed {batch.num_pending} queries")
             for qid in cur_question_ids:
-                self.parent.tl.log(40000, qid, 0, 0)
+                self.parent.tl.log(40100, qid, 0, 0)
             if self.parent.flush_qid in batch.question_ids:
                 print(f"StepE finished No.{self.parent.flush_qid} queries")
 

@@ -161,15 +161,14 @@ if __name__ == "__main__":
             # print(f"Batch no. {i // batch_size} reached!  Now break")
             break
         
-        qids = []
+        stepa_serializer = TextDataBatcher()
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
             question_id = int(qid[uds_idx+1:])
-            qids.append(question_id)
+            stepa_serializer.question_ids.append(question_id)
+            tl.log(1000, question_id, 0, 0)
         
-        stepa_serializer = TextDataBatcher()
-        stepa_serializer.question_ids = qids
-        stepa_serializer.text_sequence = batch["questions"]
+        stepa_serializer.text_sequence = batch["question"]
         stepa_serializer.input_ids = np.asarray(batch["input_ids"])
         stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()
@@ -181,7 +180,7 @@ if __name__ == "__main__":
 
         stepb_key = stepb_prefix + f"_{batch_idx}"
         serializer = PixelValueBatcher()
-        serializer.question_ids = np.asarray(qids,dtype=np.int64)
+        serializer.question_ids = np.asarray(stepa_serializer.question_ids,dtype=np.int64)
         serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
         serialized_np = serializer.serialize()
         # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
