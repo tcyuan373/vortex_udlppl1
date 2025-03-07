@@ -63,7 +63,7 @@ class MonoDataBatcher:
         question_ids_size = batch_size * np.dtype(np.int64).itemsize
         input_ids_size = batch_size * 32 * np.dtype(np.int64).itemsize
         attention_mask_size = batch_size * 32 * np.dtype(np.int64).itemsize
-        pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
+        pixel_values_size = batch_size * 1  * 3 * 224 * 224 * np.dtype(np.float32).itemsize
         
         total_size = (header_size + metadata_size + question_ids_size +
                         input_ids_size + attention_mask_size + pixel_values_size + total_text_seq_size)
@@ -168,8 +168,8 @@ class MonoDataBatcher:
         offset += attention_mask_size
         
         # --- Read pixel_values ---
-        pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
-        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 1 * 224 * 224, offset=offset).reshape((batch_size, 1, 224, 224))
+        pixel_values_size = batch_size * 1 * 3 *  224 * 224 * np.dtype(np.float32).itemsize
+        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 1 * 3* 224 * 224, offset=offset).reshape((batch_size, 1, 3, 224, 224))
         offset += pixel_values_size
         
         # --- Read text_sequence segment ---
@@ -203,7 +203,7 @@ class PendingMonoBatcher:
         self.text_sequence = []     # List[str] of length batch_size.
         self.input_ids = torch.empty((self.max_batch_size, 32), dtype=torch.int64, device="cuda")
         self.attention_mask = torch.empty((self.max_batch_size, 32), dtype=torch.int64, device="cuda")
-        self.pixel_values = torch.empty((self.max_batch_size, 1, 224, 224), dtype=torch.float32, device="cuda")
+        self.pixel_values = torch.empty((self.max_batch_size, 1, 3, 224, 224), dtype=torch.float32, device="cuda")
         
     def space_left(self):
         return self.max_batch_size - self.num_pending

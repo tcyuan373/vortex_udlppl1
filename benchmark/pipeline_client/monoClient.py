@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import numpy as np
 import os, time
 import struct
 import torch
@@ -100,14 +100,14 @@ if __name__ == "__main__":
     prefix          = "/Mono/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
-    batch_size      = 1
-    num_batches     = 100
+    batch_size      = 2
+    num_batches     = 10
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
-    ds_dir = "/mydata/EVQA_datasets/EVQA_data"
-    image_root_dir = "/mydata/EVQA_datasets"
-    use_split = "test"
+    ds_dir = "/mnt/nvme0/ty373/EVQA_data"
+    image_root_dir = "/mnt/nvme0/ty373"
+    use_split = "train"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
     query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(599)])
+                                            })[use_split].select([i for i in range(166000, 166099, 1)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_text_sequence)
@@ -144,16 +144,13 @@ if __name__ == "__main__":
             uds_idx =  int(qid.find("_"))
             question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
-        batcher.attention_mask = batch["attention_mask"]
-        batcher.input_ids = batch["input_ids"]
-        batcher.questions = batch["question"]
-        batcher.text_sequence = batch["text_sequence"] 
-        # print(f"Check text sequence: {batch['text_sequence']}")
+            tl.log(10000, int(question_id), 0, 0)
+        batcher.attention_mask = np.array(batch["attention_mask"])
+        batcher.input_ids = np.array(batch["input_ids"])
+        batcher.text_sequence = batch["question"] 
         batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-        # print(f"before sending, check PV size to be {torch.Tensor(batch['pixel_values']).numpy().shape}")    
-        
         serialized = batcher.serialize()
-        tl.log(10000, i, 0, 0)
+        
         res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
         

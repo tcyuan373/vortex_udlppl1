@@ -63,7 +63,7 @@ class MONOFLMR:
                  question_ids,
                  text_sequence,
                  ):
-         if self.flmr_model == None:
+        if self.flmr_model == None:
             self.load_model_cpu()
             
         if self.searcher == None:
@@ -82,7 +82,7 @@ class MONOFLMR:
             searcher=self.searcher,
             queries= queries,
             query_embeddings=query_embeddings,
-            num_document_to_retrieve=1, # how many documents to retrieve for each query
+            num_document_to_retrieve=5, # how many documents to retrieve for each query
             centroid_search_batch_size=None,
         )
         

@@ -155,11 +155,11 @@
                 "user_defined_logic_config_list": [
                     {
                         "python_path":["python_udls"],
-                        "module":"monolithic",
-                        "entry_class":"Monolithic_UDL",
-                        "index_root_path":"/mydata/EVQA_datasets/index/",
+                        "module":"monolithic_udl",
+                        "entry_class":"MonolithicUDL",
+                        "index_root_path":"/mnt/nvme0/ty373/index/",
                         "index_name":"EVQA_PreFLMR_ViT-L",
-                        "index_experiment_name":"EVQA_test_split",
+                        "index_experiment_name":"EVQA_train_split",
                         "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
                         "image_processor_name":"openai/clip-vit-large-patch14",
                         "max_exe_batch_size":16,
