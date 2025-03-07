@@ -18,8 +18,8 @@ from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
 
-
-
+image_root_dir = "/mnt/nvme0/ty373/"
+ds_dir = "/mnt/nvme0/ty373/EVQA_data/"
 STEPA_SHARD_INDEX = 0
 STEPB_SHARD_INDEX = 1
 STEPA_SUBGROUP_INDEX = 0
@@ -113,7 +113,6 @@ def add_path_prefix_in_img_path(example, prefix):
     
 
 if __name__ == "__main__":
-    
     tl = TimestampLogger()
     capi = ServiceClientAPI()
     stepa_prefix = "/stepA/"
@@ -126,9 +125,9 @@ if __name__ == "__main__":
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
-    image_root_dir = "/mnt/nvme0/yy354"
+    
     use_split = "train"
-    ds_dir = "/mnt/nvme0/yy354/EVQA_data/EVQA_data/"
+    
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
     query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path,
@@ -170,7 +169,7 @@ if __name__ == "__main__":
         
         stepa_serializer = TextDataBatcher()
         stepa_serializer.question_ids = qids
-        stepa_serializer.text_sequence = batch["text_sequence"]
+        stepa_serializer.text_sequence = batch["questions"]
         stepa_serializer.input_ids = np.asarray(batch["input_ids"])
         stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()

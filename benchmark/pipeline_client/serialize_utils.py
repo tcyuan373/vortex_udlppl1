@@ -20,122 +20,158 @@ def utf8_length(s: str) -> int:
 class MonoDataBatcher:
     def __init__(self):
         # All fields must have the same batch size.
-        self.pixel_values = None         # np.ndarray of shape (batch_size, 1, 224, 224) and dtype=np.float32
-        self.text_sequence = []          # List of strings (one per query)
-        self.question_ids = []           # List of ints (one per query)
-        self.questions = []              # List of strings (one per query)
+        self.pixel_values = None        # np.ndarray of shape (batch_size, 1, 224, 224) and dtype=np.float32
+        self.text_sequence = []         # List of strings (one per query)
+        self.question_ids = []          # List of ints (one per query)
+        self.input_ids = None           # np.ndarray of shape (batch_size, 32) and dtype=np.int64
+        self.attention_mask = None      # np.ndarray of shape (batch_size, 32) and dtype=np.int64   
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
     
+    
     def serialize(self) -> np.ndarray:
-
+        """
+        Serializes the following fields into a contiguous buffer:
+          - Header: 4 bytes for batch_size (uint32).
+          - Metadata: For each text_sequence element, store two int64 values (offset and length).
+          - Fixed segments:
+              * question_ids: (batch_size,) int64.
+              * input_ids: (batch_size, 32) int64.
+              * attention_mask: (batch_size, 32) int64.
+              * pixel_values: (batch_size, 1, 224, 224) float32.
+          - Variable segment:
+              * text_sequence: concatenated UTF-8 encoded bytes.
+        """
         batch_size = len(self.question_ids)
-        if not (len(self.questions) == len(self.text_sequence) == batch_size):
-            raise ValueError("All input lists must have the same length")
-        if self.pixel_values is None or self.pixel_values.shape[0] != batch_size:
-            raise ValueError("pixel_values must be provided and its first dimension must equal batch_size")
-        # Prepare variable-length segments: questions and text_sequence.
-        question_encodings = [q.encode("utf-8") for q in self.questions]
-        text_seq_encodings = [t.encode("utf-8") for t in self.text_sequence]
-        # Compute offsets for questions segment.
-        question_offsets = []
-        offset = 0
-        for enc in question_encodings:
-            question_offsets.append(offset)
-            offset += len(enc)
-        total_questions_size = offset
-        # Compute offsets for text_sequence segment.
+        # Compute offsets and total size for text_sequence without storing encoded values.
         text_seq_offsets = []
-        offset = 0
-        for enc in text_seq_encodings:
-            text_seq_offsets.append(offset)
-            offset += len(enc)
-        total_text_seq_size = offset
-        # Fixed-length parts.
-        header_size = 4  # 4 bytes for batch_size (uint32).
+        offset_temp = 0
+        for t in self.text_sequence:
+            text_seq_offsets.append(offset_temp)
+            offset_temp += utf8_length(t)
+        total_text_seq_size = offset_temp
+        
+        header_size = np.dtype(np.uint32).itemsize   # 4 bytes
+        
+        # Define metadata: two int64 values per example.
         metadata_dtype = np.dtype([
-            ("question_offset", np.int64),
-            ("question_length", np.int64),
             ("text_sequence_offset", np.int64),
-            ("text_sequence_length", np.int64),
+            ("text_sequence_length", np.int64)
         ])
         metadata_size = batch_size * metadata_dtype.itemsize
-        qids_size = batch_size * np.dtype(np.int64).itemsize
-        pixel_values_size = self.pixel_values.nbytes  # e.g., batch_size * 1 * 224 * 224 * 4
-        total_size = (header_size + metadata_size + qids_size +
-                      total_questions_size + total_text_seq_size + pixel_values_size)
+        
+        # Fixed segments sizes.
+        question_ids_size = batch_size * np.dtype(np.int64).itemsize
+        input_ids_size = batch_size * 32 * np.dtype(np.int64).itemsize
+        attention_mask_size = batch_size * 32 * np.dtype(np.int64).itemsize
+        pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
+        
+        total_size = (header_size + metadata_size + question_ids_size +
+                        input_ids_size + attention_mask_size + pixel_values_size + total_text_seq_size)
+        
         # Allocate one contiguous buffer.
         buffer = np.zeros(total_size, dtype=np.uint8)
-        # --- Write header ---
+        offset = 0
+        
+        # --- Write header: batch_size (uint32) ---
         np.frombuffer(buffer[:header_size], dtype=np.uint32)[0] = batch_size
-        # --- Write metadata ---
-        metadata_start = header_size
+        offset += header_size
+        
+        # --- Write metadata for text_sequence ---
+        metadata_start = offset
         metadata_array = np.frombuffer(buffer[metadata_start:metadata_start+metadata_size],
                                        dtype=metadata_dtype)
-        for i in range(batch_size):
-            metadata_array[i]["question_offset"] = question_offsets[i]
-            metadata_array[i]["question_length"] = len(question_encodings[i])
+        for i, t in enumerate(self.text_sequence):
             metadata_array[i]["text_sequence_offset"] = text_seq_offsets[i]
-            metadata_array[i]["text_sequence_length"] = len(text_seq_encodings[i])
+            metadata_array[i]["text_sequence_length"] = utf8_length(t)
+        offset += metadata_size
+        
         # --- Write question_ids ---
-        qids_start = metadata_start + metadata_size
-        qids_array = np.frombuffer(buffer[qids_start:qids_start+qids_size], dtype=np.int64)
+        qids_start = offset
+        qids_array = np.frombuffer(buffer[qids_start:qids_start+question_ids_size], dtype=np.int64)
         qids_array[:] = np.array(self.question_ids, dtype=np.int64)
-        # --- Write questions segment ---
-        questions_start = qids_start + qids_size
-        pos = questions_start
-        for enc in question_encodings:
-            n = len(enc)
-            buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
-            pos += n
+        offset += question_ids_size
+        
+        # --- Write input_ids ---
+        input_ids_start = offset
+        buffer[input_ids_start:input_ids_start+input_ids_size] = self.input_ids.view(np.uint8).reshape(-1)
+        offset += input_ids_size
+        
+        # --- Write attention_mask ---
+        attention_mask_start = offset
+        buffer[attention_mask_start:attention_mask_start+attention_mask_size] = self.attention_mask.view(np.uint8).reshape(-1)
+        offset += attention_mask_size
+        
+        # --- Write pixel_values ---
+        pixel_values_start = offset
+        buffer[pixel_values_start:pixel_values_start+pixel_values_size] = self.pixel_values.view(np.uint8).reshape(-1)
+        offset += pixel_values_size
+        
         # --- Write text_sequence segment ---
-        text_seq_start = questions_start + total_questions_size
+        # Instead of pre-encoding, encode each string inline.
+        text_seq_start = offset
         pos = text_seq_start
-        for enc in text_seq_encodings:
-            n = len(enc)
+        for t in self.text_sequence:
+            enc = t.encode("utf-8")  # Encode inline.
+            n = len(enc)             # Alternatively, self.utf8_length(t)
             buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
             pos += n
-        # --- Write pixel_values segment ---
-        pixel_values_start = text_seq_start + total_text_seq_size
-        pixel_bytes = self.pixel_values.tobytes()  # Get contiguous raw bytes.
-        buffer[pixel_values_start:pixel_values_start+pixel_values_size] = np.frombuffer(pixel_bytes, dtype=np.uint8)
+        offset += total_text_seq_size
+        
         self._bytes = buffer
         return buffer
     
     def deserialize(self, data: np.ndarray):
         """
-        Deserializes the contiguous byte array back into the original fields.
-        Assumes the same layout as produced by serialize().
+        Deserializes the contiguous buffer back into the fields.
+        Layout:
+          - Header: 4 bytes (batch_size, uint32)
+          - Metadata: per example text_sequence offset and length (int64)
+          - question_ids: array of int64, shape (batch_size,)
+          - input_ids: array of int64, shape (batch_size, 32)
+          - attention_mask: array of int64, shape (batch_size, 32)
+          - pixel_values: array of float32, shape (batch_size, 1, 224, 224)
+          - text_sequence: concatenated UTF-8 bytes.
+        After deserialization, question_ids is converted to a Python list.
         """
         self._bytes = data
         buffer = data
         offset = 0
-        # --- Read header ---
-        batch_size = int(np.frombuffer(buffer[offset:offset+4], dtype=np.uint32)[0])
-        offset += 4
-        # --- Read metadata ---
+        
+        # --- Read header: batch_size ---
+        header_size = np.dtype(np.uint32).itemsize
+        batch_size = int(np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0])
+        offset += header_size
+        
+        # --- Read metadata for text_sequence ---
         metadata_dtype = np.dtype([
-            ("question_offset", np.int64),
-            ("question_length", np.int64),
             ("text_sequence_offset", np.int64),
-            ("text_sequence_length", np.int64),
+            ("text_sequence_length", np.int64)
         ])
         metadata_size = batch_size * metadata_dtype.itemsize
-        metadata_array = np.frombuffer(buffer[offset:offset+metadata_size], dtype=metadata_dtype)
+        metadata_array = np.frombuffer(buffer, dtype=metadata_dtype, count=batch_size, offset=offset)
         offset += metadata_size
+        
         # --- Read question_ids ---
-        qids_size = batch_size * np.dtype(np.int64).itemsize
-        qids = np.frombuffer(buffer[offset:offset+qids_size], dtype=np.int64).tolist()
-        offset += qids_size
-        # --- Read questions segment ---
-        total_questions_size = sum(int(x) for x in metadata_array["question_length"])
-        questions_bytes = buffer[offset:offset+total_questions_size]
-        offset += total_questions_size
-        questions = []
-        for m in metadata_array:
-            start = int(m["question_offset"])
-            length = int(m["question_length"])
-            questions.append(questions_bytes[start:start+length].tobytes().decode("utf-8"))
-            
+        question_ids_size = batch_size * np.dtype(np.int64).itemsize
+        qids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset).tolist()
+        offset += question_ids_size
+        
+        # --- Read input_ids ---
+        input_ids_size = batch_size * 32 * np.dtype(np.int64).itemsize
+        num_input_ids = batch_size * 32
+        input_ids = np.frombuffer(buffer, dtype=np.int64, count=num_input_ids, offset=offset).reshape((batch_size, 32))
+        offset += input_ids_size
+        
+        # --- Read attention_mask ---
+        attention_mask_size = batch_size * 32 * np.dtype(np.int64).itemsize
+        attention_mask = np.frombuffer(buffer, dtype=np.int64, count=num_input_ids, offset=offset).reshape((batch_size, 32))
+        offset += attention_mask_size
+        
+        # --- Read pixel_values ---
+        pixel_values_size = batch_size * 1 * 224 * 224 * np.dtype(np.float32).itemsize
+        pixel_values = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 1 * 224 * 224, offset=offset).reshape((batch_size, 1, 224, 224))
+        offset += pixel_values_size
+        
         # --- Read text_sequence segment ---
         total_text_seq_size = sum(int(x) for x in metadata_array["text_sequence_length"])
         text_seq_bytes = buffer[offset:offset+total_text_seq_size]
@@ -146,25 +182,51 @@ class MonoDataBatcher:
             length = int(m["text_sequence_length"])
             text_sequence.append(text_seq_bytes[start:start+length].tobytes().decode("utf-8"))
             
-        # --- Read pixel_values segment ---
-        pixel_values_size = batch_size * 1 * 3 * 224 * 224 * np.dtype(np.float32).itemsize
-        pixel_values_bytes = buffer[offset:offset+pixel_values_size]
-        offset += pixel_values_size
-        pixel_values = np.frombuffer(pixel_values_bytes, dtype=np.float32).reshape((batch_size, 1, 3,224, 224))
         # Restore fields.
-        
-        self.question_ids = qids
-        self.questions = questions
-        self.pixel_values = pixel_values
+        self.question_ids = qids           # as a Python list.
         self.text_sequence = text_sequence
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+        self.pixel_values = pixel_values
+         
+         
+         
+class PendingMonoBatcher:
+    '''
+    Super batch of MonoDataBatcher, used for MonolithicModel runtime batch execution
+    '''
+    def __init__(self, batch_size: int):
+        self.max_batch_size = batch_size
+        self.num_pending = 0
+        # TODO: when using GPU RDMA direct, below fields should be allocated in CUDA memory
+        self.question_ids = []      # List[int] of length batch_size.
+        self.text_sequence = []     # List[str] of length batch_size.
+        self.input_ids = torch.empty((self.max_batch_size, 32), dtype=torch.int64, device="cuda")
+        self.attention_mask = torch.empty((self.max_batch_size, 32), dtype=torch.int64, device="cuda")
+        self.pixel_values = torch.empty((self.max_batch_size, 1, 224, 224), dtype=torch.float32, device="cuda")
         
-    def get_data(self):
-        return {
-            "question_ids": self.question_ids,
-            "questions": self.questions,
-            "pixel_values": self.pixel_values,
-            "text_sequence": self.text_sequence
-        }
+    def space_left(self):
+        return self.max_batch_size - self.num_pending
+    
+    def add_data(self, MonoDataBatcher, start_pos):
+        num_to_add = min(self.space_left(), len(MonoDataBatcher.question_ids) - start_pos)
+        end_pos = start_pos + num_to_add
+        self.question_ids.extend(copy.deepcopy(MonoDataBatcher.question_ids[start_pos:end_pos]))
+        self.text_sequence.extend(copy.deepcopy(MonoDataBatcher.text_sequence[start_pos:end_pos]))
+        pending_end_pos = self.num_pending + num_to_add
+        self.input_ids[self.num_pending:pending_end_pos].copy_(torch.tensor(MonoDataBatcher.input_ids[start_pos:end_pos], device="cuda"))
+        self.attention_mask[self.num_pending:pending_end_pos].copy_(torch.tensor(MonoDataBatcher.attention_mask[start_pos:end_pos], device="cuda"))
+        self.pixel_values[self.num_pending:pending_end_pos].copy_(torch.tensor(MonoDataBatcher.pixel_values[start_pos:end_pos], device="cuda"))
+        self.num_pending = pending_end_pos
+        return end_pos
+    
+    def reset(self):
+        self.question_ids = []
+        self.text_sequence = []
+        self.input_ids.fill_(0)
+        self.attention_mask.fill_(0)
+        self.pixel_values.fill_(0)
+        self.num_pending = 0
         
 
 #===============  Class and Serializer for Step A Text encoder ===============

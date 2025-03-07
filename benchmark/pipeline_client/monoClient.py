@@ -144,6 +144,8 @@ if __name__ == "__main__":
             uds_idx =  int(qid.find("_"))
             question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
+        batcher.attention_mask = batch["attention_mask"]
+        batcher.input_ids = batch["input_ids"]
         batcher.questions = batch["question"]
         batcher.text_sequence = batch["text_sequence"] 
         # print(f"Check text sequence: {batch['text_sequence']}")
