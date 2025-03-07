@@ -58,5 +58,5 @@ def faiss_knn_cluster(args):
     
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()

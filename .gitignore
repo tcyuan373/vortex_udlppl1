@@ -2,14 +2,43 @@
 *.tar
 *.tar.*
 *.zip
-gist/
-miniset/
-hotpot15/
+
+# Ignore dataset for vector database
+**/gist/
+**/miniset/
+**/hotpot15/
+
+# Ignore VS Code settings and extensions
+.vscode/
+*.code-workspace
+
+# Ignore VS Code debugging and testing files
+.vscode-test/
+.vscode-oss-dev/
 
 # build folder
 build-*
 
-# ignore prebuilt hnsw indicies
-benchmark/perf_data/hnsw_index/
-# ignore build_hnsw_index executable
-benchmark/perf_data/build_hnsw_index
+# ignore prebuilt hnsw indicies 
+*.bin
+
+# ignore py cache
+*__pycache__*
+
+# ignore indeces
+*/indexes/*
+
+#ignore model checkpoints
+*.pt
+
+# ignore data input for pipeline1
+*.parquet
+*.jpg
+*.arrow
+*inat/*
+*google-landmark/*
+
+
+FLMR
+scripts/faiss
+benchmark/perf_data/

@@ -262,7 +262,12 @@ public:
             while (alive) {
                 /* 10.1 pick the requests */
                 std::unique_lock req_lock(python_request_mutex);
+                /*** https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
+                    GIL needs to be explicitly release. Otherwise, the c api is holding the GIL, even when no req is being processed.
+                 */
+                Py_BEGIN_ALLOW_THREADS
                 python_request_cv.wait(req_lock,[&]{return !python_request_queue.empty();});
+                Py_END_ALLOW_THREADS
                 std::queue<python_request_t> todo_list;
                 python_request_queue.swap(todo_list);
                 req_lock.unlock();
@@ -754,20 +759,16 @@ private:
             return nullptr;
         }
 
-        /*** NOTE: different from main repo, need value to be a byte object instead of numpy array object ***/
-        if (!PyBytes_Check(value)) {
+        if (!PyArray_Check(value)) {
             PyErr_SetString(PyExc_AssertionError,
-                    "The second argument, value, is NOT a Byte object!");
+                    "The second argument, value, is NOT a NumPy array!");
             return nullptr;
         }
-        // Change the emit type to byte object for customizable serialization schemes
-        // PyArrayObject *ndarray = reinterpret_cast<PyArrayObject*>(value);
-        // uint8_t * data = reinterpret_cast<uint8_t*>(PyBytes_AsString(ndarray));
-        // Blob blob_wrapper(data, static_cast<std::size_t>(PyArray_NBYTES(ndarray)), true);
+        
         /* STEP 3: Call _emit_func. */
-        uint8_t * data = reinterpret_cast<uint8_t*>(PyBytes_AsString(value));
-        std::size_t size = static_cast<std::size_t>(PyBytes_Size(value));
-        Blob blob_wrapper(data, size, true);
+        PyArrayObject *ndarray = reinterpret_cast<PyArrayObject*>(value);
+        uint8_t * data = reinterpret_cast<uint8_t*>(PyArray_DATA(ndarray));
+        Blob blob_wrapper(data, static_cast<std::size_t>(PyArray_NBYTES(ndarray)), true);
 
         (*_emit_func)(std::string(key)
                      ,version

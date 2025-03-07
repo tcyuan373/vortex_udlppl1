@@ -67,21 +67,119 @@
     },
     {
         "id": "100000000-1aaa-00a0-0000-000000000000",
-        "desc": "Example Dataflow graph with Python UDL",
+        "desc": "Pipeline1 Dataflow graph",
         "graph": [
             {
-                "pathname": "/print",
+                "pathname": "/stepA",
                 "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
                 "user_defined_logic_stateful_list": ["singlethreaded"],
                 "user_defined_logic_config_list": [
                     {
                         "python_path":["python_udls"],
-                        "module":"sample_udl",
-                        "entry_class":"ConsolePrinterUDL",
+                        "module":"stepa_udl",
+                        "entry_class":"StepAUDL",
+                        "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
+                        "local_encoder_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_A_query_text_encoder.pt",
+                        "local_projection_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_A_query_text_linear.pt",
+                        "max_exe_batch_size":10,
+                        "batch_time_us":100,
+                        "max_emit_batch_size":3
+                    }],
+                "destinations": [{"/stepD":"put"}]
+            },
+            {
+                "pathname": "/stepB",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"stepb_udl",
+                        "entry_class":"StepBUDL",
+                        "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
+                        "local_encoder_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_B_vision_encoder.pt",
+                        "local_projection_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_B_vision_projection.pt",
+                        "max_exe_batch_size":16,
+                        "batch_time_us":100,
+                        "max_emit_batch_size":8
+                    }],
+                "destinations": [{"/stepD":"put"}]
+            },
+            {
+                "pathname": "/stepD",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"stepd_udl",
+                        "entry_class":"StepCDUDL",
+                        "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
+                        "local_stepc_model_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_C_transformer_mapping_input_linear.pt",
+                        "local_tf_mapping_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_D_transformer_mapping.pt",
+                        "local_tf_mapping_output_path":"/mnt/nvme0/yy354/models/models_pipeline1/models_step_D_transformer_mapping_output.pt",
+                        "max_exe_batch_size":16,
+                        "batch_time_us":100,
+                        "max_emit_batch_size":8
+                    }],
+                "destinations": [{"/stepE":"put"}]
+            },
+            {
+                "pathname": "/stepE",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"stepe_udl",
+                        "entry_class":"StepEUDL",
+                        "index_root_path":"/mnt/nvme0/yy354/",
+                        "index_experiment_name":"EVQA_train_split/",
+                        "index_name":"EVQA_PreFLMR_ViT-L",
+                        "max_exe_batch_size":16,
+                        "batch_time_us":100,
+                        "flush_qid":166019
+                    }],
+                "destinations": [{}]
+            }
+        ]
+    },
+    {
+        "id": "200010001-1bbb-01b1-1111-000000111122",
+        "desc": "Pipeline1 Monolithic pipeline",
+        "graph": [
+            {
+                "pathname": "/Mono",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"monolithic",
+                        "entry_class":"Monolithic_UDL",
                         "udl_conf_key1":"sample config key 1"
                     }],
                 "destinations": [{}]
             }
         ]
+    },
+    {
+        "id": "300000000-3ccc-12c3-3333-000000033333",
+        "desc": "Logging purpose graph",
+        "graph": [
+            {
+                "pathname": "/flush_log",
+                "user_defined_logic_list": ["6cfe8f64-3a1d-11ed-8e7e-0242ac110006"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "python_path":["python_udls"],
+                        "module":"flush_log_udl",
+                        "entry_class":"FlushLogUDL"
+                    }],
+                "destinations": [{}]
+            }
+        ]
     }
+    
 ]

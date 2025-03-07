@@ -51,22 +51,22 @@ target_link_libraries(start_webservice ${Boost_LIBRARIES} derecho::cascade)
 
 add_subdirectory(benchmark)
 add_subdirectory(vortex_udls)
+add_subdirectory(data)
 
 # Copy the configurations after the executables are built
-add_dependencies(start_webservice run_benchmark build_hnsw_index)
+add_dependencies(start_webservice benchmark_post_build python_udl_manager build_hnsw_index)
 add_custom_command(TARGET start_webservice POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/cfg
         ${CMAKE_CURRENT_BINARY_DIR}/cfg
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/vortex_udls/python/python_udls
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/layout.json.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/dfgs.json.tmp
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg.tmp
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/udl_dlls.cfg.tmp
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/perf_data
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/perf_data
-        ${CMAKE_CURRENT_BINARY_DIR}/perf_data
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/setup
-        ${CMAKE_CURRENT_BINARY_DIR}/setup
-    # Create symlinks for the build index executables
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/build_hnsw_index
-        ${CMAKE_CURRENT_BINARY_DIR}/perf_data/build_hnsw_index
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/layout.json
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/layout.json.tmp
@@ -99,15 +99,15 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/udl_dlls.cfg
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/python_udls
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n1/python_udls
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/python_udls
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/python_udls
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/python_udls
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/vortex_udls/python/python_udls
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/python_udls
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/clear_log.sh.tmp
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/clear_log.sh 
@@ -119,22 +119,28 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/clear_log.sh
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/cfg/clear_log.sh.tmp
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/clear_log.sh
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/data/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n0/perf_data
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/data/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n1/perf_data
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/data/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/perf_data
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/data/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/perf_data
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/perf_data
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/data/perf_data
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/perf_data
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/setup
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/setup
-    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/pipeline_client
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/run_benchmark
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark

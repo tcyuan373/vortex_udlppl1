@@ -58,11 +58,11 @@ After the vector database is constructed, clients could send batch of queries to
 
 
 ### 4. Performance testing 
-Client node is run in node n2. For performance testing, we created client side test scripts under the folder ```/perf_test```. 
+Client node is run in node n2. For performance testing, we created client side test scripts under the folder ```/benchmark```. 
 
 #### 4.1. Dataset
 
-The dataset used for perf_test could be download from directory ```/setup/perf_data```. There are two datasets that prepared for experiments.
+The dataset used for perf_test could be download from directory ```/data/perf_data```. There are two datasets that prepared for experiments.
 
 -  miniset is a subset of MSMARCO dataset(https://microsoft.github.io/msmarco/). It has around 800 documents, and used for a fast-check of the system. You can download it by running ```./download_miniset.sh```
 

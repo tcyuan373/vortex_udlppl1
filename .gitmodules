@@ -1,3 +1,3 @@
-[submodule "benchmark/perf_data/gp-ann"]
-	path = benchmark/perf_data/gp-ann
+[submodule "data/gp-ann"]
+	path = data/gp-ann
 	url = https://github.com/aliciayuting/gp-ann.git
