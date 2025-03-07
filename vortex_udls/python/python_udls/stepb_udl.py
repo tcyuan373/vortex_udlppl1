@@ -85,7 +85,6 @@ class StepBModelWorker:
                     if self.next_batch == self.current_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
             self.cv.notify()
-            print("added to queue")
             
 
     def main_loop(self):
@@ -105,13 +104,11 @@ class StepBModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
-                    print("StepB found something to process")
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
                 continue
             
-            print("StepB about to execute")
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
@@ -121,7 +118,7 @@ class StepBModelWorker:
                                                 vision_second_last_layer_hidden_states.cpu().detach().numpy(),
                                                 batch.question_ids,
                                                 batch.num_pending)
-            print("added to send buffer")
+            print(f"stepB finish execute {batch.num_pending} queries")
             self.pending_batches[self.current_batch].reset()
 
 
@@ -185,7 +182,7 @@ class StepBEmitWorker:
                                         shard_index=cur_shard_id, 
                                         message_id=0, as_trigger=True, blocking=False) # async put
                 num_sent += serialize_batch_size
-                print(f"StepB sent {serialize_batch_size} queries to shard {cur_shard_id}")
+                # print(f"StepB sent {serialize_batch_size} queries to shard {cur_shard_id}")
                 
             print(f"StepB total sent {num_sent} queries next UDL")
         
@@ -275,6 +272,6 @@ class StepBUDL(UserDefinedLogic):
         '''
         Destructor
         '''
-        print(f"ConsolePrinterUDL destructor")
+        print(f"StepBUDL destructor")
         pass
     

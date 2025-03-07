@@ -14,8 +14,10 @@ from serialize_utils import (StepCDIntermediateResult,
                             StepDMessageBatcher,StepBResultBatchManager, 
                             StepAResultBatchManager, PendingStepCDDataBatcher)
 
-STEPD_NEXT_UDL_SHARD_INDEX = 0
-STEPCD_NEXT_UDL_SHARDS = [2]
+STEPD_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
+STEPD_NEXT_UDL_SUBGROUP_INDEX = 0
+STEPD_NEXT_UDL_SHARDS = [2]
+STEPD_NEXT_UDL_PREFIX = "/stepE"
 # Initial number of pending batches smaller, because they are allocated on GPU, 
 # if the max_exec_batch_size is 16, it takes 3 * 18MB memory on GPU
 STEPCD_WORKER_INITIAL_PENDING_BATCHES = 3
@@ -116,14 +118,11 @@ class StepCDModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
-                    print("StepCD found something to process")
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
                 continue
-            
-            print("StepCD about to execute")
-            
+                        
             # Execute the batch
             transformer_mapping_input_features = self.mlp_model.execMLP(batch.vision_second_last_layer_hidden_states[:batch.num_pending,:,:])
             query_embeddings = self.transformer_mapping_model.execTransformerMappingNetwork(
@@ -132,15 +131,13 @@ class StepCDModelWorker:
                                 batch.text_encoder_hidden_states[:batch.num_pending,:,:], 
                                 batch.vision_embeddings[:batch.num_pending,:,:],
                                 transformer_mapping_input_features)
-            result = query_embeddings.cpu().detach().numpy()
-            print(f"stepCD finish execution query_emebdding shape: {result.shape}")
-            
-            # self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
-            #                                     vision_second_last_layer_hidden_states.cpu().detach().numpy(),
-            #                                     batch.question_ids,
-            #                                     batch.num_pending)
-            # print("added to send buffer")
-            # self.pending_batches[self.current_batch].reset()
+            query_embeddings = query_embeddings.cpu().detach().numpy()
+            print(f"stepCD finish execution query_emebdding shape: {query_embeddings.shape}")
+            self.parent.emit_worker.add_to_buffer(batch.question_ids, 
+                                                             query_embeddings, 
+                                                             batch.np_text_sequence_bytes, 
+                                                             batch.num_pending)
+            self.pending_batches[self.current_batch].reset()
 
 
 class StepCDEmitWorker:
@@ -151,11 +148,17 @@ class StepCDEmitWorker:
         self.thread = None
         self.parent = parent
         self.my_thread_id = thread_id
-        self.send_buffer = [StepAResultBatchManager() for _ in range(len(STEPCD_NEXT_UDL_SHARDS))]  # list of PendingTextDataBatcher
         self.max_emit_batch_size = self.parent.max_emit_batch_size
+        self.send_buffer = [StepDMessageBatcher(max_batch_size = self.max_emit_batch_size) for _ in range(STEPCD_WORKER_INITIAL_PENDING_BATCHES)]
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
+        # Batch send similar logic as batch exec
+        self.current_batch = -1    
+        self.next_batch = 0   
+        self.next_to_process = 0
         self.running = False
+        
+        self.sent_batch_counter = 0
     
     def start(self):
         self.running = True
@@ -171,19 +174,80 @@ class StepCDEmitWorker:
             self.running = False
             self.cv.notify_all()
 
-    def add_to_buffer(self, question_ids, text_sequence, input_ids,
-                      text_embeddings, text_encoder_hidden_states):
+    def add_to_buffer(self, question_ids, query_embeddings, text_sequence_np, num_pending):
         '''
         pass by object reference to avoid deep-copy
         '''
-        pass
-            
-    def process_and_emit_results(self, to_send):
-        pass
+        question_added = 0
+        with self.cv:
+            while question_added < num_pending:
+                free_batch = self.next_batch
+                space_left = self.send_buffer[free_batch].space_left()
+                # Find the idx in the pending_batches to add the data
+                while space_left == 0:
+                    free_batch = (free_batch + 1) % len(self.send_buffer)
+                    if free_batch == self.current_batch:
+                        free_batch = (free_batch + 1) % len(self.send_buffer)
+                    if free_batch >= self.next_batch:
+                        break
+                    space_left = self.send_buffer[free_batch].space_left()
+                if space_left == 0:
+                    new_batch = StepDMessageBatcher(max_batch_size = self.max_emit_batch_size)
+                    self.send_buffer.append(new_batch)  
+                    free_batch = len(self.send_buffer) - 1
+                    space_left = self.send_buffer[free_batch].space_left()
+                # Add data to send_buffer
+                end_idx = self.send_buffer[free_batch].add_results(question_ids, 
+                                                                   text_sequence_np,
+                                                                   query_embeddings, 
+                                                                   question_added)
+                question_added = end_idx
+                self.next_batch = free_batch
+                #  if we complete filled the buffer, cycle to the next
+                if self.send_buffer[free_batch].space_left() == 0:
+                    self.next_batch = (self.next_batch + 1) % len(self.send_buffer)
+                    if self.next_batch == self.current_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.send_buffer)
+            self.cv.notify()
+            # print(f"added {num_pending} query result to send buffer")
         
     
     def main_loop(self):
-        pass
+        batch = None
+        while self.running:
+            if not batch is None:
+                batch.reset()
+            with self.cv:
+                self.current_batch = -1
+                if self.send_buffer[self.next_to_process].num_queries == 0:
+                    self.cv.wait(timeout=self.parent.batch_time_us/1000000)
+                    
+                if self.send_buffer[self.next_to_process].num_queries != 0:
+                    self.current_batch = self.next_to_process
+                    self.next_to_process = (self.next_to_process + 1) % len(self.send_buffer)
+                    batch = self.send_buffer[self.current_batch]
+                    
+                    if self.current_batch == self.next_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.send_buffer) 
+            if not self.running:
+                break
+            if self.current_batch == -1 or not batch:
+                continue
+            
+            # serialize the batch
+            batch_np = batch.serialize()
+            # send to a evenly chosen shard
+            shard_idx = STEPD_NEXT_UDL_SHARDS[(self.sent_batch_counter % len(STEPD_NEXT_UDL_SHARDS))]
+            new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
+            self.parent.capi.put_nparray(new_key, batch_np, 
+                                 subgroup_type=STEPD_NEXT_UDL_SUBGROUP_TYPE,
+                                subgroup_index=STEPD_NEXT_UDL_SUBGROUP_INDEX, 
+                                shard_index=shard_idx, 
+                                message_id=1, as_trigger=True, blocking=False)
+            self.sent_batch_counter += 1
+            print(f"StepCD sent {batch.num_queries} queries")
+            self.send_buffer[self.current_batch].reset()
+            
             
         
 
@@ -218,7 +282,16 @@ class StepCDUDL(UserDefinedLogic):
         self.model_worker = None
         self.emit_worker = None
         self.sent_msg_count = 0
-        
+    
+    def start_threads(self):
+        '''
+        Start the worker threads
+        '''
+        if not self.model_worker:
+            self.model_worker = StepCDModelWorker(self, 1)
+            self.model_worker.start()
+            self.emit_worker = StepCDEmitWorker(self, 2)
+            self.emit_worker.start()
 
     def append_result_to_collector(self, key, blob):
         
@@ -275,10 +348,7 @@ class StepCDUDL(UserDefinedLogic):
             # vision_embeddings                       # step B      B * 32 * 128
             # vision_second_last_layer_hidden_states)     # step B  B * 256 * 1024
         if not self.model_worker:
-            self.model_worker = StepCDModelWorker(self, 0)
-            self.model_worker.start()
-            self.emit_worker = StepCDEmitWorker(self, 0)
-            self.emit_worker.start()
+            self.start_threads()
             
         key = kwargs["key"]
         blob = kwargs["blob"]
@@ -322,5 +392,5 @@ class StepCDUDL(UserDefinedLogic):
         '''
         Destructor
         '''
-        print(f"ConsolePrinterUDL destructor")
+        print(f"StepCDUDL destructor")
         pass

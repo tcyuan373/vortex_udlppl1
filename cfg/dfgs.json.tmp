@@ -133,7 +133,11 @@
                         "python_path":["python_udls"],
                         "module":"stepe_udl",
                         "entry_class":"StepEUDL",
-                        "udl_conf_key1":"sample config key 1"
+                        "index_root_path":"/mnt/nvme0/yy354/",
+                        "index_experiment_name":"EVQA_train_split/",
+                        "index_name":"EVQA_PreFLMR_ViT-L",
+                        "max_exe_batch_size":16,
+                        "batch_time_us":100
                     }],
                 "destinations": [{}]
             }

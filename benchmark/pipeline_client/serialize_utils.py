@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings("ignore")
 import numpy as np
 import torch
+import copy
 
 '''
 Serialization helper classes and functions for Pipeline1, FLMR pipeline 
@@ -844,156 +845,187 @@ class PendingStepCDDataBatcher():
         self.vision_second_last_layer_hidden_states.fill_(0)
         self.num_pending = 0
 
+
 class StepDMessageBatcher:
-    def __init__(self):
-        # All fields must have the same batch size.
+    def __init__(self, max_batch_size = None):
+        self.num_queries = 0
         self.question_ids = []       # List[int] of length batch_size.
-        self.queries = []            # List[str] of length batch_size.
-        self.query_embeddings = None # np.ndarray of shape (batch_size, 320, 128), dtype=np.float32.
+        
+        # Serialization fields
+        self.max_batch_size = max_batch_size
+        self.np_text_sequence_bytes = []  # List of reference to np.ndarray that is utf-8 encoded text_sequence, only decode it when asked
+        self.query_embeddings_list = []   # List of reference np.ndarray of shape (320, 128), dtype=np.float32.
+        self.text_pos = {}   # qid -> (offset, length)
+        
+        # Deserialization fields
+        self.text_sequence = []     # List[str] of length batch_size.
+        self.query_embeddings = None  # np.ndarray of shape (batch_size, 320, 128), dtype=np.float32.
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
+        
+    def space_left(self):
+        return self.max_batch_size - self.num_queries
+    
+    def add_results(self, question_id, text_sequence, query_embeddings, start_pos):
+        num_to_add = min(self.space_left(), len(question_id) - start_pos)
+        end_pos = start_pos + num_to_add
+        self.question_ids.extend(question_id[start_pos:end_pos])
+        for i in range(start_pos, end_pos):
+            # append the reference to the numpy arrays without copy
+            self.np_text_sequence_bytes.append(text_sequence[i])
+            self.query_embeddings_list.append(query_embeddings[i])
+        self.num_queries += num_to_add
+        return end_pos
+    
 
     def serialize(self) -> np.ndarray:
         """
         Serializes the following fields into a contiguous byte buffer:
           - Header: 4 bytes for batch_size (uint32).
-          - Metadata for queries: for each query, two int64 values:
+          - Metadata for text_sequence: for each query, two int64 values:
                 * query_offset: starting offset (in bytes) within the variable segment.
                 * query_length: byte-length of the query.
           - Fixed segments:
                 * question_ids: (batch_size,) int64.
                 * query_embeddings: (batch_size, 320, 128) float32.
           - Variable segment:
-                * queries: concatenated UTF-8 encoded bytes.
+                * text_sequence: concatenated UTF-8 encoded bytes.
         """
-        batch_size = len(self.question_ids)
-        if len(self.queries) != batch_size:
-            raise ValueError("Length of queries must equal length of question_ids")
-        if self.query_embeddings is None or self.query_embeddings.shape[0] != batch_size:
-            raise ValueError("query_embeddings must be provided and its first dimension must equal batch_size")
-
-        # --- Compute offsets for queries using utf8_length() inline ---
-        query_offsets = []
-        offset_temp = 0
-        for q in self.queries:
-            query_offsets.append(offset_temp)
-            offset_temp += utf8_length(q)
-        total_queries_size = offset_temp
-
-        # --- Compute sizes for fixed parts ---
-        header_size = np.dtype(np.uint32).itemsize  # 4 bytes.
-
-        # Metadata: for each query, store (query_offset, query_length) as int64.
+        # Compute the total size 
+        batch_size = self.num_queries
+        header_size = np.dtype(np.uint32).itemsize
         metadata_dtype = np.dtype([("query_offset", np.int64), ("query_length", np.int64)])
         metadata_size = batch_size * metadata_dtype.itemsize
-
-        # question_ids: one int64 per example.
         qids_size = batch_size * np.dtype(np.int64).itemsize
+        query_embeddings_size = batch_size * 320 * 128 * np.dtype(np.float32).itemsize
+        total_text_sequence_np_size = 0
+        cur_text_offset = header_size + metadata_size + qids_size + query_embeddings_size
+        for idx, q in enumerate(self.np_text_sequence_bytes):
+            total_text_sequence_np_size += len(q)
+            self.text_pos[self.question_ids[idx]] = (cur_text_offset, len(q))
+            cur_text_offset += len(q)
+        total_size = header_size + metadata_size + qids_size + query_embeddings_size + total_text_sequence_np_size
+        
+        # Allocate one contiguous buffer.
+        serialized_buffer = np.empty(total_size, dtype=np.uint8)
+        
+        # Determine segment positions
+        metadata_pos = header_size
+        qids_offset = metadata_pos + metadata_size
+        query_embeddings_offset = qids_offset + qids_size
+        text_offset = query_embeddings_offset + query_embeddings_size
 
-        # query_embeddings: its total size in bytes.
-        query_embeddings_size = self.query_embeddings.nbytes
+        # Get the array reference to write
+        metadata_array = np.frombuffer(serialized_buffer[metadata_pos:metadata_pos + metadata_size], 
+                                       dtype=metadata_dtype)
+        qids_array = np.frombuffer(serialized_buffer[qids_offset:qids_offset + qids_size],
+                                    dtype=np.int64)
+        query_embeddings_array = np.frombuffer(serialized_buffer[query_embeddings_offset:query_embeddings_offset + query_embeddings_size],
+                                                dtype=np.float32).reshape((batch_size, 320, 128))
+        
+        # Write Header: batch_size (as uint32)
+        np.frombuffer(serialized_buffer[:header_size], dtype=np.uint32)[0] = batch_size
+        written_counter = 0  # local position in this byte buffer
+        for idx in range(batch_size):
+            qid = self.question_ids[idx]
+            abs_offset, qlen = self.text_pos[qid]
+            metadata_array[written_counter]["query_offset"] = abs_offset
+            metadata_array[written_counter]["query_length"] = qlen
+            qids_array[written_counter] = qid
+            query_embeddings_array[written_counter] = self.query_embeddings_list[idx]
+            serialized_buffer[abs_offset:abs_offset + qlen] = self.np_text_sequence_bytes[idx]   # could use np.frombuffer(....)
+            written_counter += 1
+        return serialized_buffer
 
-        total_size = header_size + metadata_size + qids_size + query_embeddings_size + total_queries_size
-
-        # --- Allocate one contiguous buffer ---
-        buffer = np.zeros(total_size, dtype=np.uint8)
-        offset = 0
-
-        # --- Write header: batch_size (uint32) ---
-        np.frombuffer(buffer[:header_size], dtype=np.uint32)[0] = batch_size
-        offset += header_size
-
-        # --- Write metadata for queries ---
-        metadata_start = offset
-        metadata_array = np.frombuffer(buffer[metadata_start:metadata_start+metadata_size], dtype=metadata_dtype)
-        for i, q in enumerate(self.queries):
-            metadata_array[i]["query_offset"] = query_offsets[i]
-            metadata_array[i]["query_length"] = utf8_length(q)
-        offset += metadata_size
-
-        # --- Write question_ids ---
-        qids_start = offset
-        qids_array = np.frombuffer(buffer[qids_start:qids_start+qids_size], dtype=np.int64)
-        qids_array[:] = np.array(self.question_ids, dtype=np.int64)
-        offset += qids_size
-
-        # --- Write query_embeddings ---
-        embeddings_start = offset
-        # Write a flat view (zero-copy) of the query_embeddings.
-        buffer[embeddings_start:embeddings_start+query_embeddings_size] = self.query_embeddings.view(np.uint8).reshape(-1)
-        offset += query_embeddings_size
-
-        # --- Write queries variable segment ---
-        queries_start = offset
-        pos = queries_start
-        for q in self.queries:
-            enc = q.encode("utf-8")  # Inline encoding.
-            n = len(enc)             # Alternatively, self.utf8_length(q)
-            buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
-            pos += n
-        offset += total_queries_size
-
-        self._bytes = buffer
-        return buffer
-
+        
     def deserialize(self, data: np.ndarray):
         """
-        Deserializes the contiguous byte buffer back into the fields.
+        Deserializes the contiguous byte buffer back into the original fields.
         Expected layout (in order):
           - Header: 4 bytes (uint32: batch_size)
-          - Metadata: for each query, (query_offset, query_length) as int64.
+          - Metadata for text_sequence: per query (query_offset and query_length as int64)
           - question_ids: array of int64, shape (batch_size,)
           - query_embeddings: array of float32, shape (batch_size, 320, 128)
-          - queries: concatenated UTF-8 encoded bytes.
-        After deserialization, question_ids is converted to a Python list.
+          - text_sequence: concatenated UTF-8 bytes.
         """
         self._bytes = data
         buffer = data
         offset = 0
 
         # --- Read header ---
-        header_size = np.dtype(np.uint32).itemsize
-        batch_size = int(np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0])
-        offset += header_size
-
-        # --- Read metadata for queries ---
+        batch_size = np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0]
+        offset += 4
+        
         metadata_dtype = np.dtype([("query_offset", np.int64), ("query_length", np.int64)])
         metadata_size = batch_size * metadata_dtype.itemsize
+        qids_size = batch_size * np.dtype(np.int64).itemsize
+        query_embeddings_size = batch_size * 320 * 128 * np.dtype(np.float32).itemsize
+        
         metadata_array = np.frombuffer(buffer, dtype=metadata_dtype, count=batch_size, offset=offset)
         offset += metadata_size
-
-        # --- Read question_ids ---
-        qids_size = batch_size * np.dtype(np.int64).itemsize
-        question_ids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset).tolist()
+        self.question_ids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset)
         offset += qids_size
-
-        # --- Read query_embeddings ---
-        query_embeddings_size = batch_size * 320 * 128 * np.dtype(np.float32).itemsize
-        num_embeddings = batch_size * 320 * 128
-        query_embeddings = np.frombuffer(buffer, dtype=np.float32, count=num_embeddings, offset=offset).reshape((batch_size, 320, 128))
+        self.query_embeddings = np.frombuffer(buffer, dtype=np.float32, count=batch_size * 320 * 128, offset=offset).reshape((batch_size, 320, 128))
         offset += query_embeddings_size
-
-        # --- Read queries variable segment ---
-        total_queries_size = sum(int(x) for x in metadata_array["query_length"])
-        queries_bytes = buffer[offset:offset+total_queries_size]
-        offset += total_queries_size
-        queries = []
+        
         for m in metadata_array:
             start = int(m["query_offset"])
             length = int(m["query_length"])
-            queries.append(queries_bytes[start:start+length].tobytes().decode("utf-8"))
+            self.text_sequence.append(buffer[start:start+length].tobytes().decode("utf-8"))
+        self.num_queries = batch_size
+        
+    def reset(self):
+        '''
+        Reset the fields
+        '''
+        self.question_ids = []
+        self.np_text_sequence_bytes = []
+        self.query_embeddings_list = []
+        self.text_sequence = []
+        self.num_queries = 0
 
-        self.question_ids = question_ids
-        self.query_embeddings = query_embeddings
-        self.queries = queries
-
-    def get_data(self):
-        return {
-            "question_ids": self.question_ids,
-            "query_embeddings": self.query_embeddings,
-            "queries": self.queries
-        }
+    def print_shape(self):
+        print("--- StepDMessageBatcher shape info ---")
+        print(f"question_ids: {self.question_ids.shape}")
+        print(f"query_embeddings: {self.query_embeddings.shape}")
+        print(f"text_sequence: {len(self.text_sequence)}")
 
 
+class PendingSearchBatcher():
+    '''
+    Super batch of Colbert Search, used for model runtime batch execution
+    '''
+    def __init__(self, batch_size: int):
+        self.max_batch_size = batch_size
+        self.num_pending = 0
+        # TODO: when using GPU RDMA direct, below fields should be allocated in CUDA memory
+        self.question_ids = []      # List[int] of length batch_size.
+        self.text_sequence = []     # List[str] of length batch_size.
+        self.query_embeddings = torch.empty((self.max_batch_size, 320, 128), dtype=torch.float32, device="cuda:1")
+
+    def space_left(self):
+        return self.max_batch_size - self.num_pending
+    
+    def add_data(self, stepDMessageBatcher, start_pos):
+        num_to_add = min(self.space_left(), stepDMessageBatcher.num_queries - start_pos)
+        end_pos = start_pos + num_to_add
+        # use a copy to avoid RMDA buffer being freed, since current implementation doesn't block the action queue at Cascade
+        self.question_ids.extend(copy.deepcopy(stepDMessageBatcher.question_ids[start_pos:end_pos])) 
+        self.text_sequence.extend(stepDMessageBatcher.text_sequence[start_pos:end_pos])
+        self.query_embeddings[self.num_pending:self.num_pending + num_to_add].copy_(
+            torch.tensor(stepDMessageBatcher.query_embeddings[start_pos:end_pos], device="cuda")
+        )
+        self.num_pending += num_to_add
+        return end_pos
+
+    def reset(self):
+        '''
+        Reset the fields
+        '''
+        self.question_ids = []
+        self.text_sequence = []
+        self.query_embeddings.fill_(0)
+        self.num_pending = 0
+        
 
 
     

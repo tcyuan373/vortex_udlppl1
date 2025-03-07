@@ -1,38 +1,121 @@
 #!/usr/bin/env python3
-import os
-import numpy as np
 import json
-import re
-import struct
-import warnings
+import threading
+import torch
+import os
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
 
-import torch
-from torch import Tensor, nn
-from flmr import (
-    FLMRConfig, 
-    FLMRQueryEncoderTokenizer, 
-    FLMRContextEncoderTokenizer, 
-    FLMRModelForRetrieval, 
-    FLMRTextModel,
-    search_custom_collection, create_searcher
-)
-import functools
-import tqdm
-import tqdm
-from serialize_utils import StepDMessageBatcher
+from stepe_search import StepESearch
+from serialize_utils import StepDMessageBatcher, PendingSearchBatcher
 
-class IntermediateResult:
-    def __init__(self):
-        self._queries           = None
-        self._query_embeddings  = None
+STEPE_WORKER_INITIAL_PENDING_BATCHES = 3
+
+class StepEModelWorker:
+    '''
+    This is a batcher for StepA execution
+    '''
+    def __init__(self, parent, thread_id):
+        self.thread = None
+        self.parent = parent
+        self.my_thread_id = thread_id
+        self.max_exe_batch_size = self.parent.max_exe_batch_size
+        self.batch_time_us = self.parent.batch_time_us
+        self.text_encoder = StepESearch(self.parent.index_root_path, self.parent.index_experiment_name, self.parent.index_name)
+        # PendingSearchBatcher creates a batch of embeddings on CUDA
+        self.pending_batches = [PendingSearchBatcher(self.max_exe_batch_size) for _ in range(STEPE_WORKER_INITIAL_PENDING_BATCHES)]
+        
+        self.current_batch = -1    # current batch idx that main is executing
+        self.next_batch = 0        # next batch idx to add new data
+        self.next_to_process = 0  
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
+        self.running = False
     
-    def has_all(self):
-        has_all = self._queries != None and self._query_embeddings != None
-        return has_all
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
+    
+    def join(self):
+        if self.thread is not None:
+            self.thread.join()
+    
+    def signal_stop(self):
+        with self.cv:
+            self.running = False
+            self.cv.notify_all()
+
+
+    def push_to_pending_batches(self, text_data_batcher):
+        num_questions = len(text_data_batcher.question_ids)
+        question_added = 0
+        with self.cv:
+            while question_added < num_questions:
+                free_batch = self.next_batch
+                space_left = self.pending_batches[free_batch].space_left()
+                # Find the idx in the pending_batches to add the data
+                while space_left == 0:
+                    free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch == self.current_batch:
+                        free_batch = (free_batch + 1) % len(self.pending_batches)
+                    if free_batch >= self.next_batch:
+                        break
+                    space_left = self.pending_batches[free_batch].space_left()
+                if space_left == 0:
+                    # Need to create new batch, if all the pending_batches are full
+                    new_batch = PendingSearchBatcher(self.max_batch_size)
+                    self.pending_batches.append(new_batch)  
+                    free_batch = len(self.pending_batches) - 1
+                    space_left = self.pending_batches[free_batch].space_left()
+                
+                # add as many questions as possible to the pending batch
+                self.next_batch = free_batch
+                question_start_idx = question_added
+                end_idx = self.pending_batches[free_batch].add_data(text_data_batcher, question_start_idx)
+                question_added = end_idx
+                #  if we complete filled the buffer, cycle to the next
+                if self.pending_batches[free_batch].space_left() == 0:
+                    self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                    if self.next_batch == self.current_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                        
+            self.cv.notify()
+            print("stepE added to queue")
+            
+
+    def main_loop(self):
+        batch = None
+        while self.running:
+            if not batch is None:
+                batch.reset()
+            with self.cv:
+                self.current_batch = -1
+                if self.pending_batches[self.next_to_process].num_pending == 0:
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
+                    
+                if self.pending_batches[self.next_to_process].num_pending != 0:
+                    self.current_batch = self.next_to_process
+                    self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
+                    batch = self.pending_batches[self.current_batch]
+                    
+                    if self.current_batch == self.next_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    print("stepE found something to process")
+            if not self.running:
+                break
+            if self.current_batch == -1 or not batch:
+                continue
+            
+            # Execute the batch
+            # TODO: use direct memory sharing via pointer instead of copying to the host
+            queries = dict(zip(batch.question_ids, batch.text_sequence))
+            rank_dict = self.text_encoder.process_search(queries, batch.query_embeddings[:batch.num_pending])
+            print(f"~~~~ Finished StepE processed {batch.num_pending} queries ~~~~")
+            print(f"Ranking: {rank_dict.keys()}")
+            
 
 
 class StepEUDL(UserDefinedLogic):
@@ -45,49 +128,38 @@ class StepEUDL(UserDefinedLogic):
         '''
         super(StepEUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        self.searcher = None
-        self.index_root_path        = '/mydata/EVQA_datasets/index/'
-        self.index_experiment_name  = 'EVQA_train_split/'
-        self.index_name             = 'EVQA_PreFLMR_ViT-L'
-        self.collected_intermediate_results = {}
-        # self.queries2save = {}
-        # self.qembeds2save = torch.Tensor([], dtype = torch.float32)
+        
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
-        
-    def load_searcher_gpu(self):
-        self.searcher = create_searcher(
-            index_root_path=self.index_root_path,
-            index_experiment_name=self.index_experiment_name,
-            index_name=self.index_name,
-            nbits=8, # number of bits in compression
-            use_gpu=True, # break if set to False, see doc: https://docs.google.com/document/d/1KuWGWZrxURkVxDjFRy1Qnwsy7jDQb-RhlbUzm_A-tOs/edit?tab=t.0
-        )
+        self.index_root_path = self.conf["index_root_path"]
+        self.index_experiment_name = self.conf["index_experiment_name"]
+        self.index_name = self.conf["index_name"]
+        self.max_exe_batch_size = self.conf["max_exe_batch_size"]
+        self.batch_time_us = self.conf["batch_time_us"]
+        self.model_worker = None
     
-    def process_search(self, queries, query_embeddings, bsize):
-        if self.searcher == None:
-            self.load_searcher_gpu()
+    def start_threads(self):
+        '''
+        Start the worker threads
+        '''
+        if not self.model_worker:
+            self.model_worker = StepEModelWorker(self, 1)
+            self.model_worker.start()
             
-        ranking = search_custom_collection(
-            searcher=self.searcher,
-            queries=queries,
-            query_embeddings=torch.Tensor(query_embeddings),
-            num_document_to_retrieve=5, # how many documents to retrieve for each query
-            centroid_search_batch_size=bsize,
-        )
-        
-        
-        return ranking.todict()
-    
-    
+            
     def ocdpo_handler(self,**kwargs):
         key                 = kwargs["key"]
         blob                = kwargs["blob"]
-        
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1" #set with 1 for the use of cuda:1, and if set to be "0,1", all two gpus will be used
+
+        if not self.model_worker:
+            self.start_threads()
+            
         new_batcher = StepDMessageBatcher()
         new_batcher.deserialize(blob)
-        cluster_result = new_batcher.get_data()
+        self.model_worker.push_to_pending_batches(new_batcher)
+        return
         
         # bytes_obj           = blob.tobytes()
         # json_str_decoded    = bytes_obj.decode('utf-8')
@@ -95,7 +167,7 @@ class StepEUDL(UserDefinedLogic):
         queries_texts       = cluster_result['queries']
         query_embeddings    = cluster_result['query_embeddings']
         question_ids        = cluster_result['question_ids']
-        bsize               = 32
+        bsize               = None   #using the best perf config, same as the FLMR paper setting
         
         
         # queries = {question_id[i]: queries_texts[i] for i in range(len(queries_texts))}
@@ -140,5 +212,5 @@ class StepEUDL(UserDefinedLogic):
         '''
         Destructor
         '''
-        print(f"ConsolePrinterUDL destructor")
+        print(f"StepEUDL destructor")
         pass
