@@ -150,7 +150,6 @@ if __name__ == "__main__":
         batch_size=16,
         num_proc=16,
     )
-    print("herere0")
     for idx in range(0, len(ds), batch_size):
         # TODO: change to the actual at perf test
         # idx = torch.randint(0, 99, (1,)).item()
@@ -186,7 +185,7 @@ if __name__ == "__main__":
         # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
         resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
-        # time.sleep(2)
+        time.sleep(0.2)
         
     tl.flush("client_timestamp.dat")
         # time.sleep(1000)
