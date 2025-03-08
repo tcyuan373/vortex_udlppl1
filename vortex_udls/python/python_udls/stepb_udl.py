@@ -126,6 +126,9 @@ class StepBModelWorker:
                                                 vision_second_last_layer_hidden_states.cpu().detach().numpy(),
                                                 batch.question_ids,
                                                 batch.num_pending)
+            
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(20041, qid, 0, 0)
             self.pending_batches[self.current_batch].reset()
             
 
@@ -164,9 +167,15 @@ class StepBEmitWorker:
         with self.cv:
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(STEPB_NEXT_UDL_SHARDS)
+                
+                self.parent.tl.log(20050, question_ids[i], 0, 0)
+                
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                      vision_second_last_layer_hidden_states[i].view(), 
                                                      question_ids[i].view())
+                
+                
+                self.parent.tl.log(20051, question_ids[i], 0, 0)
             self.cv.notify()
             
     def process_and_emit_results(self, to_send):
