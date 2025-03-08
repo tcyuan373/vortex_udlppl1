@@ -120,7 +120,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 2
-    num_batches = 250
+    num_batches = 50
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'

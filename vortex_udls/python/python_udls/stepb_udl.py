@@ -183,7 +183,11 @@ class StepBEmitWorker:
                 serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
                 start_pos = num_sent
                 end_pos = num_sent + serialize_batch_size
+                for qid in batch_manager.question_ids_list[start_pos:end_pos]:
+                    self.parent.tl.log(20020, qid, 0, 0)
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
+                for qid in batch_manager.question_ids_list[start_pos:end_pos]:
+                    self.parent.tl.log(20021, qid, 0, 0)
                 new_key = STEPB_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
 
@@ -277,7 +281,6 @@ class StepBUDL(UserDefinedLogic):
         
         self.model_worker.push_to_pending_batches(received_batch)
         
-        return
         
         
     def __del__(self):
