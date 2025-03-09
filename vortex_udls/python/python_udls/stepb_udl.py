@@ -112,14 +112,14 @@ class StepBModelWorker:
                 continue
             
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(20030, qid, 0, 0)
+                self.parent.tl.log(20030, qid, 0, batch.num_pending)
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
             vision_embeddings, vision_second_last_layer_hidden_states = self.vision_encoder.execVisionEncoder(input_tensor, batch.num_pending)
             
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(20031, qid, 0, 0)
+                self.parent.tl.log(20031, qid, 0, batch.num_pending)
                         
             # TODO: directly batch in the GPU to avoid this GPU to host fetch 
             self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
@@ -193,10 +193,10 @@ class StepBEmitWorker:
                 start_pos = num_sent
                 end_pos = num_sent + serialize_batch_size
                 for qid in batch_manager.question_ids_list[start_pos:end_pos]:
-                    self.parent.tl.log(20020, qid, 0, 0)
+                    self.parent.tl.log(20020, qid, 0, serialize_batch_size)
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
                 for qid in batch_manager.question_ids_list[start_pos:end_pos]:
-                    self.parent.tl.log(20021, qid, 0, 0)
+                    self.parent.tl.log(20021, qid, 0, serialize_batch_size)
                 new_key = STEPB_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
 

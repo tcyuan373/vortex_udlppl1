@@ -51,7 +51,7 @@ class StepEModelWorker:
 
     def push_to_pending_batches(self, text_data_batcher):
         for qid in text_data_batcher.question_ids:
-            self.parent.tl.log(40000, qid, 0, 0)
+            self.parent.tl.log(40000, qid, 0, text_data_batcher.num_pending)
         num_questions = len(text_data_batcher.question_ids)
         question_added = 0
         with self.cv:
@@ -110,14 +110,14 @@ class StepEModelWorker:
                 continue
             
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(40030, qid, 0, 0)
+                self.parent.tl.log(40030, qid, 0, batch.num_pending)
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host 
             queries = dict(zip(batch.question_ids, batch.text_sequence))
             rank_dict = self.text_encoder.process_search(queries, batch.query_embeddings[:batch.num_pending])
             
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(40031, qid, 0, 0)
+                self.parent.tl.log(40031, qid, 0, batch.num_pending)
             
             if self.parent.flush_qid in batch.question_ids:
                 print(f"StepE finished No.{self.parent.flush_qid} queries")

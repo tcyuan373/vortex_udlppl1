@@ -118,14 +118,14 @@ class StepAModelWorker:
             
             # Execute the batch
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(10030, qid, 0, 0)
+                self.parent.tl.log(10030, qid, 0, batch.num_pending)
             # TODO: use direct memory sharing via pointer instead of copying to the host
             # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
             cur_input_ids = torch.as_tensor(batch.input_ids[:batch.num_pending], dtype=torch.long, device="cuda") 
             cur_attention_mask = torch.as_tensor(batch.attention_mask[:batch.num_pending], dtype=torch.long, device="cuda")
             text_embeddings, text_encoder_hidden_states = self.text_encoder.execTextEncoder(cur_input_ids, cur_attention_mask)
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(10031, qid, 0, 0)
+                self.parent.tl.log(10031, qid, 0, batch.num_pending)
             # Appending to the sending buffer to be sent by the emit worker
             self.parent.emit_worker.add_to_buffer(batch.question_ids[:batch.num_pending], 
                                                   batch.text_sequence[:batch.num_pending], 
@@ -188,7 +188,7 @@ class StepAEmitWorker:
             cur_shard_id = STEPA_NEXT_UDL_SHARDS[idx]
             
             for qid in batch_manager.question_ids[:batch_manager.num_queries]:
-                self.parent.tl.log(10100, qid, 0, 0)
+                self.parent.tl.log(10100, qid, 0, batch_manager.num_queries)
             
             while num_sent < batch_manager.num_queries:
                 serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)

@@ -20,8 +20,8 @@ from serialize_utils import PixelValueBatcher, TextDataBatcher
 
 image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
 ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"
-STEPA_SHARD_INDEX = 0
-STEPB_SHARD_INDEX = 1
+STEPA_SHARD_INDICES = [2]
+STEPB_SHARD_INDICES = [0, 1]
 STEPA_SUBGROUP_INDEX = 0
 STEPB_SUBGROUP_INDEX = 0
 
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
     batch_size = 2
-    num_batches = 100
+    num_batches = 500
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + 'train-00000-of-00001.parquet',
                                             'test'  : ds_dir + 'test-00000-of-00001-2.parquet',
-                                            })[use_split].select(i for i in range(166000, 166999, 1)) 
+                                            })[use_split].select(i for i in range(166000, 167000, 1)) 
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_inputs)
@@ -172,9 +172,11 @@ if __name__ == "__main__":
         stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
         stepa_serialized_np = stepa_serializer.serialize()
         stepa_key = stepa_prefix + f"_{batch_idx}"
+        
+        stepa_next_shard_idx = STEPA_SHARD_INDICES[(batch_idx) % len(STEPA_SHARD_INDICES)]
         # tl.log(10000 ,batch_idx ,0 ,0 )
         resA = capi.put_nparray(stepa_key, stepa_serialized_np,subgroup_type=subgroup_type,
-                    subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=STEPA_SHARD_INDEX, message_id=1, as_trigger=True, blokcing=True)
+                    subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=stepa_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
 
 
         stepb_key = stepb_prefix + f"_{batch_idx}"
@@ -183,9 +185,11 @@ if __name__ == "__main__":
         serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
         serialized_np = serializer.serialize()
         # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
+        stepb_next_shard_idx = STEPB_SHARD_INDICES[(batch_idx) % len(STEPB_SHARD_INDICES)]
+        
         resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
-                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=STEPB_SHARD_INDEX, message_id=1, trigger=True)
-        time.sleep(0.2)
+                    subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=stepb_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
+        time.sleep(0.02)
         
     tl.flush("client_timestamp.dat")
         # time.sleep(1000)

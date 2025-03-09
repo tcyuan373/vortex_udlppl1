@@ -124,7 +124,7 @@ class StepCDModelWorker:
                         
             # Execute the batch
             for qid in batch.question_ids:
-                self.parent.tl.log(30030, qid, 0, 0)
+                self.parent.tl.log(30030, qid, 0, batch.num_pending)
             transformer_mapping_input_features = self.mlp_model.execMLP(batch.vision_second_last_layer_hidden_states[:batch.num_pending,:,:])
             query_embeddings = self.transformer_mapping_model.execTransformerMappingNetwork(
                                 batch.input_ids[:batch.num_pending,:], 
@@ -135,7 +135,7 @@ class StepCDModelWorker:
             query_embeddings = query_embeddings.cpu().detach().numpy()
             
             for qid in batch.question_ids:
-                self.parent.tl.log(30031, qid, 0, 0)
+                self.parent.tl.log(30031, qid, 0, batch.num_pending)
             
             self.parent.emit_worker.add_to_buffer(batch.question_ids, 
                                                              query_embeddings, 
@@ -244,7 +244,7 @@ class StepCDEmitWorker:
             new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
             
             for qid in batch.question_ids:
-                self.parent.tl.log(30100, qid, 0, 0)
+                self.parent.tl.log(30100, qid, 0, batch.num_queries)
                 
             self.parent.capi.put_nparray(new_key, batch_np, 
                                 subgroup_type=STEPD_NEXT_UDL_SUBGROUP_TYPE,
@@ -320,16 +320,16 @@ class StepCDUDL(UserDefinedLogic):
                 
                 if self.collected_intermediate_results[qid].collected_all():
                     self.model_worker.push_to_pending_batches(self.collected_intermediate_results[qid])
-                    self.tl.log(30000, qid, 3, 0)
+                    self.tl.log(30011, qid, 3, 0)
                     del self.collected_intermediate_results[qid]
                     
-
+ 
             
         elif step_B_idx != -1:
             stepb_batcher = StepBResultBatchManager()
             stepb_batcher.deserialize(blob)
             for idx, qid in enumerate(stepb_batcher.question_ids):
-                self.tl.log(30000, qid, 2, 0)
+                self.tl.log(30010, qid, 2, 0)
                 if not self.collected_intermediate_results.get(qid):
                     self.collected_intermediate_results[qid] = StepCDIntermediateResult()
                 self.collected_intermediate_results[qid]._question_id = qid
@@ -338,7 +338,7 @@ class StepCDUDL(UserDefinedLogic):
                 
                 if self.collected_intermediate_results[qid].collected_all():
                     self.model_worker.push_to_pending_batches(self.collected_intermediate_results[qid])
-                    self.tl.log(30000, qid, 3, 0)
+                    self.tl.log(30011, qid, 3, 0)
                     del self.collected_intermediate_results[qid]
                 
 
