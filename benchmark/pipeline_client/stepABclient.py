@@ -17,6 +17,8 @@ from flmr import (
 from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
+from torch.utils.data import DataLoader
+
 
 image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
 ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"
@@ -111,7 +113,20 @@ def add_path_prefix_in_img_path(example, prefix):
         return example
     
     
+def batch_iter(dataset, batch_size):
+    """Yield batches sequentially from the dataset."""
+    batch = []
+    for item in dataset:
+        batch.append(item)
+        if len(batch) == batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
+    
+        
+        
 if __name__ == "__main__":
     tl = TimestampLogger()
     capi = ServiceClientAPI()
@@ -119,7 +134,7 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 1
+    BS = 1
     num_batches = 1000
     
     # directories and str configs
@@ -150,16 +165,36 @@ if __name__ == "__main__":
         batch_size=16,
         num_proc=16,
     )
-    for idx in range(0, len(ds), batch_size):
-        # TODO: change to the actual at perf test
-        # idx = torch.randint(0, 99, (1,)).item()
-        batch = ds[idx : idx + batch_size]
-        batch_idx = idx // batch_size
-        # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
-        if batch_idx >= num_batches:    
-            # print(f"Batch no. {i // batch_size} reached!  Now break")
-            break
+    ds.set_format(
+        type="torch", 
+        columns=["input_ids", "attention_mask", "pixel_values", "text_sequence", "question_id", "question"]
+    )
+
+
+    # Create a DataLoader for sequential access with prefetching
+    loader = DataLoader(
+        ds, 
+        batch_size=BS, 
+        shuffle=False, 
+        num_workers=16,      # Use multiple workers to prefetch batches in parallel
+        prefetch_factor=2,   # How many batches each worker preloads (can adjust based on your system)
+        pin_memory=True      # Optionally, if you are transferring to GPU later
+    )
+
+    # for idx in range(0, len(ds), batch_size):
+    #     # TODO: change to the actual at perf test
+    #     # idx = torch.randint(0, 99, (1,)).item()
+    #     batch = ds[idx : idx + batch_size]
+    #     batch_idx = idx // batch_size
+    #     # print(f"got batch {batch} with idx being {idx} and {idx+batch_size}")
+    #     if batch_idx >= num_batches:    
+    #         # print(f"Batch no. {i // batch_size} reached!  Now break")
+    #         break
         
+    for batch_idx, batch in enumerate(loader):
+        if batch_idx >= num_batches:
+            break
+  
         stepa_serializer = TextDataBatcher()
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
@@ -168,8 +203,8 @@ if __name__ == "__main__":
             tl.log(1000, question_id, 0, 0)
         
         stepa_serializer.text_sequence = batch["question"]
-        stepa_serializer.input_ids = np.asarray(batch["input_ids"])
-        stepa_serializer.attention_mask = np.asarray(batch["attention_mask"])
+        stepa_serializer.input_ids = batch["input_ids"].numpy()
+        stepa_serializer.attention_mask = batch["attention_mask"].numpy()
         stepa_serialized_np = stepa_serializer.serialize()
         stepa_key = stepa_prefix + f"_{batch_idx}"
         
@@ -177,18 +212,30 @@ if __name__ == "__main__":
         # tl.log(10000 ,batch_idx ,0 ,0 )
         resA = capi.put_nparray(stepa_key, stepa_serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=stepa_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
-
+        for qid in batch["question_id"]:
+            uds_idx =  int(qid.find("_"))
+            question_id = int(qid[uds_idx+1:])
+            # stepa_serializer.question_ids.append(question_id)
+            tl.log(10001, question_id, 0, 0)
 
         stepb_key = stepb_prefix + f"_{batch_idx}"
         serializer = PixelValueBatcher()
         serializer.question_ids = np.asarray(stepa_serializer.question_ids,dtype=np.int64)
-        serializer.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
+        serializer.pixel_values = batch["pixel_values"].numpy()
         serialized_np = serializer.serialize()
         # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
         stepb_next_shard_idx = STEPB_SHARD_INDICES[(batch_idx) % len(STEPB_SHARD_INDICES)]
         
         resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=stepb_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
+        
+        for qid in batch["question_id"]:
+            uds_idx =  int(qid.find("_"))
+            question_id = int(qid[uds_idx+1:])
+            # stepa_serializer.question_ids.append(question_id)
+            tl.log(10020, question_id, 0, 0)
+        
+        
         time.sleep(0.0002)
         
     tl.flush("client_timestamp.dat")
