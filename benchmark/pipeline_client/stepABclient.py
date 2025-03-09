@@ -18,7 +18,7 @@ from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
 from torch.utils.data import DataLoader
-
+import faiss
 
 image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
 ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"
@@ -212,11 +212,7 @@ if __name__ == "__main__":
         # tl.log(10000 ,batch_idx ,0 ,0 )
         resA = capi.put_nparray(stepa_key, stepa_serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPA_SUBGROUP_INDEX,shard_index=stepa_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
-        for qid in batch["question_id"]:
-            uds_idx =  int(qid.find("_"))
-            question_id = int(qid[uds_idx+1:])
-            # stepa_serializer.question_ids.append(question_id)
-            tl.log(10001, question_id, 0, 0)
+        
 
         stepb_key = stepb_prefix + f"_{batch_idx}"
         serializer = PixelValueBatcher()
@@ -226,6 +222,13 @@ if __name__ == "__main__":
         # print(f"With serializer, we got message size of: {sys.getsizeof(serialized_np.tobytes())}")
         stepb_next_shard_idx = STEPB_SHARD_INDICES[(batch_idx) % len(STEPB_SHARD_INDICES)]
         
+        
+        
+        for qid in batch["question_id"]:
+            uds_idx =  int(qid.find("_"))
+            question_id = int(qid[uds_idx+1:])
+            # stepa_serializer.question_ids.append(question_id)
+            tl.log(10001, question_id, 0, 0)
         resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=stepb_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
         
