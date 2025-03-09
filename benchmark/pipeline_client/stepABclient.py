@@ -119,8 +119,8 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 2
-    num_batches = 500
+    batch_size = 4
+    num_batches = 250
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
