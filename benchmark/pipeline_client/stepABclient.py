@@ -119,8 +119,8 @@ if __name__ == "__main__":
     stepb_prefix = "/stepB/"
     subgroup_type = "VolatileCascadeStoreWithStringKey"
     
-    batch_size = 4
-    num_batches = 250
+    batch_size = 1
+    num_batches = 1000
     
     # directories and str configs
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         
         resB = capi.put_nparray(stepb_key, serialized_np,subgroup_type=subgroup_type,
                     subgroup_index=STEPB_SUBGROUP_INDEX,shard_index=stepb_next_shard_idx, message_id=1, as_trigger=True, blokcing=False)
-        time.sleep(0.02)
+        # time.sleep(0.002)
         
     tl.flush("client_timestamp.dat")
         # time.sleep(1000)
