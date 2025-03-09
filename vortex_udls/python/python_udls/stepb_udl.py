@@ -112,7 +112,7 @@ class StepBModelWorker:
                 continue
             
             for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(20020, qid, 0, batch.num_pending)
+                self.parent.tl.log(20020, qid, self.next_batch, batch.num_pending)
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
