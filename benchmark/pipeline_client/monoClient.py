@@ -17,7 +17,7 @@ from datasets import load_dataset
 from serialize_utils import MonoDataBatcher
 from torch.utils.data import DataLoader
 
-MONO_SHARD_IDS = [1,2]
+MONO_SHARD_IDS = [0, 1, 2]
 
 
 def serialize_string_list(string_list):
@@ -106,8 +106,8 @@ if __name__ == "__main__":
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
-    ds_dir = "/mnt/nvme0/ty373/EVQA_data"
-    image_root_dir = "/mnt/nvme0/ty373"
+    ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data"
+    image_root_dir = "/mnt/nvme0/vortex_pipeline1"
     use_split = "train"
     # model configs, tokenziers
     flmr_config = FLMRConfig.from_pretrained(checkpoint_path)
@@ -174,8 +174,9 @@ if __name__ == "__main__":
         
         mono_shard_id = MONO_SHARD_IDS[(batch_idx) % len(MONO_SHARD_IDS)]
         
-        res = capi.put_nparray(prefix + f"_{i}", serialized_np, subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=mono_shard_id, message_id=i, as_trigger=True, blokcing=False)
+        res = capi.put_nparray(prefix + f"_{batch_idx}", serialized_np, subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=mono_shard_id, message_id=batch_idx, as_trigger=True, blokcing=False)
 
+        time.sleep(0.01)
         
     tl.flush("mono_client_timestamp.dat")
