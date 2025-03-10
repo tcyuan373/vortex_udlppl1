@@ -126,6 +126,7 @@ class StepEModelWorker:
             if self.parent.flush_qid in batch.question_ids:
                 print(f"StepE finished No.{self.parent.flush_qid} queries")
             
+            self.pending_batches[self.current_batch].reset()
             # self.parent.capi.put_nparray("finish", np.array(batch.question_ids), subgroup_type=0, subgroup_index=0, shard_index=0, message_id=1)
             
 
