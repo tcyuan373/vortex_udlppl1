@@ -51,7 +51,11 @@ class StepEModelWorker:
 
     def push_to_pending_batches(self, text_data_batcher):
         for qid in text_data_batcher.question_ids:
-            self.parent.tl.log(40000, qid, 0, text_data_batcher.num_queries)
+            self.parent.tl.log(40000, qid, self.next_batch, text_data_batcher.num_queries)
+            if qid == self.parent.flush_qid:
+                print(f"StepE received No.{qid} queries")
+            
+            
         num_questions = len(text_data_batcher.question_ids)
         question_added = 0
         with self.cv:
