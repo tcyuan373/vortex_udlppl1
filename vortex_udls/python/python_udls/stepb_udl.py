@@ -19,7 +19,6 @@ STEPB_WORKER_INITIAL_PENDING_BATCHES = 8
 STEPB_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPB_NEXT_UDL_SUBGROUP_INDEX = 0
 
-STEPB_NEXT_UDL_SHARDS = [2]
 
 class StepBModelWorker:
     '''
@@ -140,7 +139,7 @@ class StepBEmitWorker:
         self.thread = None
         self.parent = parent
         self.my_thread_id = thread_id
-        self.send_buffer = [StepBResultBatchManager() for _ in range(len(STEPB_NEXT_UDL_SHARDS))]  # list of PendingTextDataBatcher
+        self.send_buffer = [StepBResultBatchManager() for _ in range(len(self.parent.stepb_next_udl_shards))]  # list of PendingTextDataBatcher
         self.max_emit_batch_size = self.parent.max_emit_batch_size
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -166,7 +165,7 @@ class StepBEmitWorker:
         '''
         with self.cv:
             for i in range(num_pending):
-                shard_pos = question_ids[i] % len(STEPB_NEXT_UDL_SHARDS)
+                shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
                                 
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                      vision_second_last_layer_hidden_states[i].view(), 
@@ -184,7 +183,7 @@ class StepBEmitWorker:
                     self.parent.tl.log(20100, qid, 0, 0)
             # serialize the batch_manager
             num_sent = 0
-            cur_shard_id = STEPB_NEXT_UDL_SHARDS[idx]
+            cur_shard_id = self.parent.stepb_next_udl_shards[idx]
             while num_sent < batch_manager.num_queries:
                 serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
                 start_pos = num_sent
@@ -228,7 +227,7 @@ class StepBEmitWorker:
                 if not empty:
                     to_send = self.send_buffer
                     # Below is shallow copy, to avoid deep copy of the data
-                    self.send_buffer = [StepBResultBatchManager() for _ in range(len(STEPB_NEXT_UDL_SHARDS))]
+                    self.send_buffer = [StepBResultBatchManager() for _ in range(len(self.parent.stepb_next_udl_shards))]
                     
             self.process_and_emit_results(to_send)
             
@@ -256,6 +255,8 @@ class StepBUDL(UserDefinedLogic):
         self.max_exe_batch_size = int(self.conf.get("max_exe_batch_size", 16))
         self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
         self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
+        
+        self.stepb_next_udl_shards = self.conf["stepb_next_udl_shards", [2]]
         
         self.model_worker = None
         self.emit_worker = None

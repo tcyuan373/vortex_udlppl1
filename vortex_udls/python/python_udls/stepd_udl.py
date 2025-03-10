@@ -16,7 +16,6 @@ from serialize_utils import (StepCDIntermediateResult,
 
 STEPD_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPD_NEXT_UDL_SUBGROUP_INDEX = 0
-STEPD_NEXT_UDL_SHARDS = [2]
 STEPD_NEXT_UDL_PREFIX = "/stepE"
 # Initial number of pending batches smaller, because they are allocated on GPU, 
 # if the max_exec_batch_size is 16, it takes 3 * 18MB memory on GPU
@@ -240,7 +239,7 @@ class StepCDEmitWorker:
             # serialize the batch
             batch_np = batch.serialize()
             # send to a evenly chosen shard
-            shard_idx = STEPD_NEXT_UDL_SHARDS[(self.sent_batch_counter % len(STEPD_NEXT_UDL_SHARDS))]
+            shard_idx = self.parent.stepd_next_udl_shards[(self.sent_batch_counter % len(self.parent.stepd_next_udl_shards))]
             new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
             
             for qid in batch.question_ids:
@@ -281,6 +280,7 @@ class StepCDUDL(UserDefinedLogic):
         self.batch_time_us = self.conf["batch_time_us"]
         self.max_emit_batch_size = self.conf["max_emit_batch_size"]
         
+        self.stepd_next_udl_shards = self.conf["stepd_next_udl_shards", [0, 1]]
         # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}
         

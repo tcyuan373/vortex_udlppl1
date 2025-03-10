@@ -101,8 +101,8 @@ if __name__ == "__main__":
     prefix          = "/Mono/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
-    BS              = 2
-    num_batches     = 50
+    BS              = 1
+    num_batches     = 1000
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(166000, 166100, 1)])
+                                            })[use_split].select([i for i in range(166000, 167000, 1)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_text_sequence)
@@ -159,7 +159,6 @@ if __name__ == "__main__":
             break
         
         batcher = MonoDataBatcher()
-        
         # print(f"Got qid list : {batch['question_id']}")
         for qid in batch["question_id"]:
             uds_idx =  int(qid.find("_"))
@@ -177,6 +176,6 @@ if __name__ == "__main__":
         res = capi.put_nparray(prefix + f"_{batch_idx}", serialized_np, subgroup_type=subgroup_type,
                     subgroup_index=subgroup_index,shard_index=mono_shard_id, message_id=batch_idx, as_trigger=True, blokcing=False)
 
-        time.sleep(0.01)
+        time.sleep(0.05)
         
     tl.flush("mono_client_timestamp.dat")
