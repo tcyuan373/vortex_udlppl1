@@ -280,7 +280,7 @@ class StepCDUDL(UserDefinedLogic):
         self.batch_time_us = self.conf["batch_time_us"]
         self.max_emit_batch_size = self.conf["max_emit_batch_size"]
         
-        self.stepd_next_udl_shards = self.conf["stepd_next_udl_shards", [0, 1]]
+        self.stepd_next_udl_shards = self.conf.get("stepd_next_udl_shards", [2])
         # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}
         

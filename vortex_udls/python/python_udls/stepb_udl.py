@@ -256,7 +256,7 @@ class StepBUDL(UserDefinedLogic):
         self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
         self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
         
-        self.stepb_next_udl_shards = self.conf["stepb_next_udl_shards", [2]]
+        self.stepb_next_udl_shards = self.conf.get("stepb_next_udl_shards", [2])
         
         self.model_worker = None
         self.emit_worker = None
