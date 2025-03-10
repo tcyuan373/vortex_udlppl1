@@ -18,7 +18,7 @@ from datasets import load_dataset
 import time
 from serialize_utils import PixelValueBatcher, TextDataBatcher
 from torch.utils.data import DataLoader
-import faiss
+# import faiss
 
 image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
 ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"

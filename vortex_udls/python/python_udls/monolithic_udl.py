@@ -49,6 +49,9 @@ class MonoModelWorker:
 
 
     def push_to_pending_batches(self, mono_data_batcher):
+        for qid in mono_data_batcher.question_ids:
+            self.parent.tl.log(40000, qid, 0, 0)
+        
         num_questions = len(mono_data_batcher.question_ids)
         question_added = 0
         with self.cv:
@@ -109,6 +112,9 @@ class MonoModelWorker:
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
+            
+            for qid in cur_question_ids:
+                self.parent.tl.log(40031, qid, 0, 0)
             cur_input_ids = batch.input_ids[:batch.num_pending]
             cur_attention_mask = batch.attention_mask[:batch.num_pending]
             cur_pixel_values = batch.pixel_values[:batch.num_pending]

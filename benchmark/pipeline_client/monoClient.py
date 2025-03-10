@@ -15,8 +15,9 @@ from flmr import (
 )
 from datasets import load_dataset
 from serialize_utils import MonoDataBatcher
+from torch.utils.data import DataLoader
 
-MONO_SHARD_ID = 0
+MONO_SHARD_IDS = [1,2]
 
 
 def serialize_string_list(string_list):
@@ -100,8 +101,8 @@ if __name__ == "__main__":
     prefix          = "/Mono/"
     subgroup_type   = "VolatileCascadeStoreWithStringKey"
     subgroup_index  = 0
-    batch_size      = 2
-    num_batches     = 10
+    BS              = 2
+    num_batches     = 50
     
     checkpoint_path = 'LinWeizheDragon/PreFLMR_ViT-L'
     image_processor_name = 'openai/clip-vit-large-patch14'
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     ds = load_dataset('parquet', data_files ={  
                                             'train' : ds_dir + '/train-00000-of-00001.parquet',
                                             'test'  : ds_dir + '/test-00000-of-00001-2.parquet',
-                                            })[use_split].select([i for i in range(166000, 166099, 1)])
+                                            })[use_split].select([i for i in range(166000, 166100, 1)])
     # preprocess datasets so that we have 
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_text_sequence)
@@ -130,11 +131,31 @@ if __name__ == "__main__":
         num_proc=16,
     )
     
-    for i in range(0, len(ds), batch_size):
-        # idx = torch.randint(0, 500, (1,)).item()
-        batch = ds[i : i + batch_size]
-        if (i // batch_size) >= num_batches:    
-            # print(f"Batch no. {i // batch_size} reached!  Now break")
+    ds.set_format(
+        type="torch", 
+        columns=["input_ids", "attention_mask", "pixel_values", "text_sequence", "question_id", "question"]
+    )
+
+
+    # Create a DataLoader for sequential access with prefetching
+    loader = DataLoader(
+        ds, 
+        batch_size=BS, 
+        shuffle=False, 
+        num_workers=16,      # Use multiple workers to prefetch batches in parallel
+        prefetch_factor=2,   # How many batches each worker preloads (can adjust based on your system)
+        pin_memory=True      # Optionally, if you are transferring to GPU later
+    )
+
+    
+    # for i in range(0, len(ds), batch_size):
+    #     # idx = torch.randint(0, 500, (1,)).item()
+    #     batch = ds[i : i + batch_size]
+    #     if (i // batch_size) >= num_batches:    
+    #         # print(f"Batch no. {i // batch_size} reached!  Now break")
+    #         break
+    for batch_idx, batch in enumerate(loader):
+        if batch_idx >= num_batches:
             break
         
         batcher = MonoDataBatcher()
@@ -145,14 +166,16 @@ if __name__ == "__main__":
             question_id = qid[uds_idx+1:]
             batcher.question_ids.append(question_id)
             tl.log(1000, int(question_id), 0, 0)
-        batcher.attention_mask = np.array(batch["attention_mask"])
-        batcher.input_ids = np.array(batch["input_ids"])
+        batcher.attention_mask = batch["attention_mask"].numpy()
+        batcher.input_ids = batch["input_ids"].numpy()
         batcher.text_sequence = batch["question"] 
-        batcher.pixel_values = torch.Tensor(batch["pixel_values"]).numpy()
-        serialized = batcher.serialize()
+        batcher.pixel_values = batch["pixel_values"].numpy()
+        serialized_np = batcher.serialize()
         
-        res = capi.put(prefix + f"_{i}", serialized.tobytes(), subgroup_type=subgroup_type,
-                    subgroup_index=subgroup_index,shard_index=MONO_SHARD_ID, message_id=i, trigger=True)
-        time.sleep(5)
+        mono_shard_id = MONO_SHARD_IDS[(batch_idx) % len(MONO_SHARD_IDS)]
+        
+        res = capi.put_nparray(prefix + f"_{i}", serialized_np, subgroup_type=subgroup_type,
+                    subgroup_index=subgroup_index,shard_index=mono_shard_id, message_id=i, as_trigger=True, blokcing=False)
+
         
     tl.flush("mono_client_timestamp.dat")

@@ -21,7 +21,7 @@ STEPD_NEXT_UDL_PREFIX = "/stepE"
 # Initial number of pending batches smaller, because they are allocated on GPU, 
 # if the max_exec_batch_size is 16, it takes 3 * 18MB memory on GPU
 STEPCD_WORKER_INITIAL_PENDING_BATCHES = 3
-MAX_STEPCD_WORKER_PENDING_BATCHES = 8
+
 
 class StepCDModelWorker:
     '''
