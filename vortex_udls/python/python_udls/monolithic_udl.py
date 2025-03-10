@@ -112,14 +112,16 @@ class MonoModelWorker:
             # Execute the batch
             # TODO: use direct memory sharing via pointer instead of copying to the host
             # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
+        
             
-            for qid in cur_question_ids:
-                self.parent.tl.log(40031, qid, 0, 0)
             cur_input_ids = batch.input_ids[:batch.num_pending]
             cur_attention_mask = batch.attention_mask[:batch.num_pending]
             cur_pixel_values = batch.pixel_values[:batch.num_pending]
             cur_question_ids = batch.question_ids[:batch.num_pending]
             cur_text_sequence = batch.text_sequence[:batch.num_pending]
+            for qid in cur_question_ids:
+                self.parent.tl.log(40031, qid, 0, 0)
+            
             ranking_dict = self.mono_flmr.execFLMR(cur_input_ids, 
                                                    cur_attention_mask,
                                                    cur_pixel_values,
