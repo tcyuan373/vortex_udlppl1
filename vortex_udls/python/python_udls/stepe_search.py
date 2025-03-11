@@ -16,7 +16,6 @@ class StepESearch:
         
 
     def load_searcher_gpu(self):
-        os.environ["CUDA_VISIBLE_DEVICES"] = "1" #set with 1 for the use of cuda:1, and if set to be "0,1", all two gpus will be used
 
         self.searcher = create_searcher(
             index_root_path=self.index_root_path,

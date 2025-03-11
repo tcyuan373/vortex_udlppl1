@@ -166,7 +166,6 @@ class StepEUDL(UserDefinedLogic):
     def ocdpo_handler(self,**kwargs):
         key                 = kwargs["key"]
         blob                = kwargs["blob"]
-        os.environ["CUDA_VISIBLE_DEVICES"] = "1" #set with 1 for the use of cuda:1, and if set to be "0,1", all two gpus will be used
 
         if not self.model_worker:
             self.start_threads()

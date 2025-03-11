@@ -1062,7 +1062,7 @@ class PendingSearchBatcher():
         # TODO: when using GPU RDMA direct, below fields should be allocated in CUDA memory
         self.question_ids = []      # List[int] of length batch_size.
         self.text_sequence = []     # List[str] of length batch_size.
-        self.query_embeddings = torch.empty((self.max_batch_size, 320, 128), dtype=torch.float32, device="cuda:1")
+        self.query_embeddings = torch.empty((self.max_batch_size, 320, 128), dtype=torch.float32, device="cuda")
 
     def space_left(self):
         return self.max_batch_size - self.num_pending
