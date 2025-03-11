@@ -240,6 +240,10 @@ add_custom_command(TARGET start_webservice POST_BUILD
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/setup
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n5/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/setup
 
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
@@ -248,6 +252,10 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/pipeline_client
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n5/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/pipeline_client
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/pipeline_client
 
@@ -258,6 +266,10 @@ add_custom_command(TARGET start_webservice POST_BUILD
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/run_benchmark
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n5/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/run_benchmark
 
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
@@ -266,6 +278,10 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n3/start_webservice
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n4/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n5/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/start_webservice
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/start_webservice
 
