@@ -64,12 +64,13 @@ class StepBModelWorker:
             while question_added < num_questions:
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
+                initial_batch = free_batch
                 # Find the idx in the pending_batches to add the data
                 while space_left == 0:
                     free_batch = (free_batch + 1) % len(self.pending_batches)
                     if free_batch == self.current_batch:
                         free_batch = (free_batch + 1) % len(self.pending_batches)
-                    if free_batch >= self.next_batch:
+                    if free_batch == initial_batch:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
