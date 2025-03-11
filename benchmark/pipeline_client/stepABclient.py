@@ -20,8 +20,8 @@ from serialize_utils import PixelValueBatcher, TextDataBatcher
 from torch.utils.data import DataLoader
 # import faiss
 
-image_root_dir = "/mnt/nvme0/vortex_pipeline1/"
-ds_dir = "/mnt/nvme0/vortex_pipeline1/EVQA_data/"
+image_root_dir = "/mydata/EVQA/"
+ds_dir = "/mydata/EVQA/EVQA_data/"
 STEPA_SHARD_INDICES = [2]
 STEPB_SHARD_INDICES = [0, 1]
 STEPA_SUBGROUP_INDEX = 0
