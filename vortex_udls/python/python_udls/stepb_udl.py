@@ -63,13 +63,7 @@ class StepBModelWorker:
         question_added = 0
         while question_added < num_questions:
             with self.cv:
-                wait_result = self.cv.wait_for(
-                    lambda: any(batch.space_left() > 0
-                            for i, batch in enumerate(self.pending_batches)
-                            if i != self.current_batch),
-                    timeout=self.batch_time_us/1000000
-                )
-                self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], 0, 0)
+                self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
@@ -82,6 +76,7 @@ class StepBModelWorker:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
                     continue
                     # self.cv.wait(timeout=self.batch_time_us/1000000) # yield to allow processing thread to run
                     # new_batch = PendingVisionDataBatcher(self.max_exe_batch_size)
