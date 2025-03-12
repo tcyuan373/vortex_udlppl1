@@ -42,6 +42,9 @@ class StepBModelWorker:
         self.running = False
     
     def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
         # Try to set higher priority for the worker thread
         try:
             thread_id = self.thread.ident
@@ -50,9 +53,6 @@ class StepBModelWorker:
             print(f"Successfully set worker thread {self.my_thread_id} to higher priority")
         except (ImportError, AttributeError, PermissionError, OSError) as e:
             print(f"Could not set worker thread priority: {e}")
-        self.running = True
-        self.thread = threading.Thread(target=self.main_loop)
-        self.thread.start()
     
     def join(self):
         if self.thread is not None:
