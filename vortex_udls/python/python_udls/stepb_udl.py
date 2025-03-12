@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import json
 import numpy as np
 import threading
@@ -268,6 +269,12 @@ class StepBUDL(UserDefinedLogic):
         '''
         Start the worker threads
         '''
+        try:
+            os.nice(10)
+            print("Set main thread to lower priority")
+        except:
+            print("Could not adjust main thread priority")
+            
         if not self.model_worker:
             self.model_worker = StepBModelWorker(self, 1)
             self.model_worker.start()
