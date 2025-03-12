@@ -733,7 +733,7 @@ class PendingVisionDataBatcher():
         '''
         Reset the fields
         '''
-        self.pixel_values.fill(0)
+        self.pixel_values = np.empty((self.max_batch_size, 1, 3, 224, 224), dtype=np.float32)
         self.question_ids = np.empty((self.max_batch_size,), dtype=np.int64)
         self.num_pending = 0
 
