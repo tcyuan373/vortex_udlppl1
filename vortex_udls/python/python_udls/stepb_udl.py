@@ -88,6 +88,8 @@ class StepBModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
             self.cv.notify()
             
+        for qid in vision_data_batcher.question_ids:
+            self.parent.tl.log(20050, qid, 0, 0)
 
     def main_loop(self):
         batch = None
