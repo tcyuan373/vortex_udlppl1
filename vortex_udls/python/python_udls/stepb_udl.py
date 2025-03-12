@@ -3,6 +3,7 @@ import json
 import numpy as np
 import threading
 import torch
+import time
 
 from VisionEncoder import VisionEncoder
 
@@ -65,8 +66,7 @@ class StepBModelWorker:
                 self.cv.wait_for(
                     lambda: any(batch.space_left() > 0
                                 for i, batch in enumerate(self.pending_batches)
-                                if i != self.current_batch),
-                    timeout=self.batch_time_us / 1000000
+                                if i != self.current_batch)
                 )
                 
                 free_batch = self.next_batch
@@ -95,6 +95,8 @@ class StepBModelWorker:
                     if self.next_batch == self.current_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                 self.cv.notify()
+            # Yield control to allow other threads to run.
+            time.sleep(self.batch_time_us / 2000000)
             
         for qid in vision_data_batcher.question_ids:
             self.parent.tl.log(20050, qid, 0, 0)
@@ -140,6 +142,7 @@ class StepBModelWorker:
             for qid in batch.question_ids[:batch.num_pending]:
                 self.parent.tl.log(20041, qid, 0, 0)
             self.pending_batches[self.current_batch].reset()
+            self.cv.notify_all()
             
             
 
