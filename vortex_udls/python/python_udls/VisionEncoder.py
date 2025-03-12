@@ -1,5 +1,4 @@
 from flmr import FLMRConfig, FLMRVisionModel
-from transformers import AutoImageProcessor
 import torch
 from torch import nn
 
@@ -26,7 +25,6 @@ class VisionEncoder:
         self.checkpoint_path            = checkpoint_path
         self.local_encoder_path         = local_encoder_path
         self.local_projection_path      = local_projection_path
-        self.image_processor            = None
         self.flmr_config                = None
 
         self.query_vision_encoder       = None
@@ -37,7 +35,6 @@ class VisionEncoder:
 
     def load_model_cpu(self):
         self.flmr_config = FLMRConfig.from_pretrained(self.checkpoint_path)
-        self.image_processor = AutoImageProcessor.from_pretrained('openai/clip-vit-large-patch14')
         self.query_vision_encoder = FLMRVisionModel(self.flmr_config.vision_config)
         self.query_vision_projection = FLMRMultiLayerPerceptron(
                 (

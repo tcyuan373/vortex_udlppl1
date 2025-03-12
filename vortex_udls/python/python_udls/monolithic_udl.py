@@ -1,21 +1,17 @@
-#!/usr/bin/env python3
 import json
-import threading
-import torch
-import os
 import cascade_context
+import threading
 from derecho.cascade.udl import UserDefinedLogic
 from derecho.cascade.member_client import ServiceClientAPI
 from derecho.cascade.member_client import TimestampLogger
+from serialize_utils import MonoDataBatcher, PendingMonoBatcher
+from mono_flmr import MONOFLMR
 
-from stepe_search import StepESearch
-from serialize_utils import StepDMessageBatcher, PendingSearchBatcher
+MONO_WORKER_INITIAL_PENDING_BATCHES = 3
 
-STEPE_WORKER_INITIAL_PENDING_BATCHES = 3
-
-class StepEModelWorker:
+class MonoModelWorker:
     '''
-    This is a batcher for StepA execution
+    This is a batcher for Monolithic model execution
     '''
     def __init__(self, parent, thread_id):
         self.thread = None
@@ -23,9 +19,12 @@ class StepEModelWorker:
         self.my_thread_id = thread_id
         self.max_exe_batch_size = self.parent.max_exe_batch_size
         self.batch_time_us = self.parent.batch_time_us
-        self.text_encoder = StepESearch(self.parent.index_root_path, self.parent.index_experiment_name, self.parent.index_name)
-        # PendingSearchBatcher creates a batch of embeddings on CUDA
-        self.pending_batches = [PendingSearchBatcher(self.max_exe_batch_size) for _ in range(STEPE_WORKER_INITIAL_PENDING_BATCHES)]
+        self.mono_flmr = MONOFLMR(self.parent.index_root_path,
+                                  self.parent.index_name,
+                                  self.parent.index_experiment_name,
+                                  self.parent.checkpoint_path,
+                                  self.parent.image_processor_name)
+        self.pending_batches = [PendingMonoBatcher(self.max_exe_batch_size) for _ in range(MONO_WORKER_INITIAL_PENDING_BATCHES)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
@@ -33,7 +32,7 @@ class StepEModelWorker:
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
         self.running = False
-    
+
     def start(self):
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
@@ -49,32 +48,27 @@ class StepEModelWorker:
             self.cv.notify_all()
 
 
-    def push_to_pending_batches(self, text_data_batcher):
-        for qid in text_data_batcher.question_ids:
-            self.parent.tl.log(40000, qid, self.next_batch, text_data_batcher.num_queries)
-            if qid == self.parent.flush_qid:
-                print(f"StepE received No.{qid} queries")
-            
-            
-        num_questions = len(text_data_batcher.question_ids)
+    def push_to_pending_batches(self, mono_data_batcher):
+        for qid in mono_data_batcher.question_ids:
+            self.parent.tl.log(40000, qid, 0, 0)
+        
+        num_questions = len(mono_data_batcher.question_ids)
         question_added = 0
         with self.cv:
             while question_added < num_questions:
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
-                initial_batch = free_batch
                 # Find the idx in the pending_batches to add the data
                 while space_left == 0:
                     free_batch = (free_batch + 1) % len(self.pending_batches)
                     if free_batch == self.current_batch:
                         free_batch = (free_batch + 1) % len(self.pending_batches)
-                    # if free_batch >= self.next_batch:
-                    if free_batch == initial_batch:
+                    if free_batch >= self.next_batch:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
                     # Need to create new batch, if all the pending_batches are full
-                    new_batch = PendingSearchBatcher(self.max_exe_batch_size)
+                    new_batch = PendingMonoBatcher(self.max_exe_batch_size)
                     self.pending_batches.append(new_batch)  
                     free_batch = len(self.pending_batches) - 1
                     space_left = self.pending_batches[free_batch].space_left()
@@ -82,7 +76,7 @@ class StepEModelWorker:
                 # add as many questions as possible to the pending batch
                 self.next_batch = free_batch
                 question_start_idx = question_added
-                end_idx = self.pending_batches[free_batch].add_data(text_data_batcher, question_start_idx)
+                end_idx = self.pending_batches[free_batch].add_data(mono_data_batcher, question_start_idx)
                 question_added = end_idx
                 #  if we complete filled the buffer, cycle to the next
                 if self.pending_batches[free_batch].space_left() == 0:
@@ -92,7 +86,6 @@ class StepEModelWorker:
                         
             self.cv.notify()
             
-
     def main_loop(self):
         batch = None
         while self.running:
@@ -110,75 +103,85 @@ class StepEModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    # print("found something to process")
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
                 continue
             
-            for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(40030, qid, 0, batch.num_pending)
             # Execute the batch
-            # TODO: use direct memory sharing via pointer instead of copying to the host 
-            queries = dict(zip(batch.question_ids, batch.text_sequence))
-            rank_dict = self.text_encoder.process_search(queries, batch.query_embeddings[:batch.num_pending])
+            # TODO: use direct memory sharing via pointer instead of copying to the host
+            # NOTE: use as_tensor instead of torch.LongTensor to avoid a copy
+        
             
-            for qid in batch.question_ids[:batch.num_pending]:
-                self.parent.tl.log(40031, qid, 0, batch.num_pending)
+            cur_input_ids = batch.input_ids[:batch.num_pending]
+            cur_attention_mask = batch.attention_mask[:batch.num_pending]
+            cur_pixel_values = batch.pixel_values[:batch.num_pending]
+            cur_question_ids = batch.question_ids[:batch.num_pending]
+            cur_text_sequence = batch.text_sequence[:batch.num_pending]
+            for qid in cur_question_ids:
+                self.parent.tl.log(40031, qid, 0, 0)
             
+            ranking_dict = self.mono_flmr.execFLMR(cur_input_ids, 
+                                                   cur_attention_mask,
+                                                   cur_pixel_values,
+                                                   cur_question_ids,
+                                                   cur_text_sequence)
+            for qid in cur_question_ids:
+                self.parent.tl.log(40100, qid, 0, 0)
             if self.parent.flush_qid in batch.question_ids:
                 print(f"StepE finished No.{self.parent.flush_qid} queries")
+
+            self.pending_batches[self.current_batch].reset()
             
-            # self.parent.capi.put_nparray("finish", np.array(batch.question_ids), subgroup_type=0, subgroup_index=0, shard_index=0, message_id=1)
+            
             
 
-
-class StepEUDL(UserDefinedLogic):
-    '''
-    StepEUDL is the simplest example showing how to use the udl
-    '''
+class MonolithicUDL(UserDefinedLogic):
+    
     def __init__(self,conf_str):
-        '''
-        Constructor
-        '''
-        super(StepEUDL,self).__init__(conf_str)
+        super(MonolithicUDL,self).__init__(conf_str)
         self.conf = json.loads(conf_str)
-        
+        # print(f"ConsolePrinter constructor received json configuration: {self.conf}")
         self.capi = ServiceClientAPI()
         self.my_id = self.capi.get_my_id()
         self.tl = TimestampLogger()
-        self.index_root_path = self.conf["index_root_path"]
-        self.index_experiment_name = self.conf["index_experiment_name"]
-        self.index_name = self.conf["index_name"]
-        self.max_exe_batch_size = self.conf["max_exe_batch_size"]
-        self.batch_time_us = self.conf["batch_time_us"]
-        self.flush_qid = self.conf["flush_qid"]
+        self.index_root_path        = self.conf["index_root_path"]
+        self.index_name             = self.conf["index_name"]
+        self.index_experiment_name  = self.conf["index_experiment_name"]
+        self.checkpoint_path        = self.conf["checkpoint_path"]
+        self.image_processor_name   = self.conf["image_processor_name"]
+        self.max_exe_batch_size = int(self.conf.get("max_exe_batch_size", 16))
+        self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
+        self.flush_qid = int(self.conf.get("flush_qid", 100))
         self.model_worker = None
-    
+
+        
     def start_threads(self):
         '''
         Start the worker threads
         '''
         if not self.model_worker:
-            self.model_worker = StepEModelWorker(self, 1)
+            self.model_worker = MonoModelWorker(self, 1)
             self.model_worker.start()
-            
-            
-    def ocdpo_handler(self,**kwargs):
-        key                 = kwargs["key"]
-        blob                = kwargs["blob"]
 
+    def ocdpo_handler(self,**kwargs):
+        
         if not self.model_worker:
             self.start_threads()
-            
-        new_batcher = StepDMessageBatcher()
+        key                 = kwargs["key"]
+        blob                = kwargs["blob"]
+        # bytes_obj           = blob.view(dtype=np.uint8)
+        # json_str_decoded    = bytes_obj.decode('utf-8')
+        new_batcher = MonoDataBatcher()
         new_batcher.deserialize(blob)
         self.model_worker.push_to_pending_batches(new_batcher)
-        
+
         
         
     def __del__(self):
         '''
         Destructor
         '''
-        print(f"StepEUDL destructor")
+        print(f"MonolithicUDL destructor")
         pass
