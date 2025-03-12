@@ -4,7 +4,6 @@ import numpy as np
 import threading
 import torch
 import time
-from queue import Queue, Empty
 
 from VisionEncoder import VisionEncoder
 
@@ -24,7 +23,7 @@ STEPB_NEXT_UDL_SUBGROUP_INDEX = 0
 
 class StepBModelWorker:
     '''
-    This is a worker for StepB batch-execution
+    This is a batcher for StepB execution
     '''
     def __init__(self, parent, thread_id):
         self.thread = None
@@ -33,18 +32,13 @@ class StepBModelWorker:
         self.max_exe_batch_size = self.parent.max_exe_batch_size
         self.batch_time_us = self.parent.batch_time_us
         self.vision_encoder = VisionEncoder(self.parent.checkpoint_path, self.parent.local_encoder_path, self.parent.local_projection_path)
-        self.pending_batches = [PendingVisionDataBatcher(self.max_exe_batch_size) 
-                               for _ in range(STEPB_WORKER_INITIAL_PENDING_BATCHES)]
-    
-        # Use queue instead of CV, since cv.wait in Python doesn't release the GIL :(
-        self.data_ready_queue = Queue()  # For signaling data is ready
-        self.space_available_queue = Queue()  # For signaling space is available
-
+        self.pending_batches = [PendingVisionDataBatcher(self.max_exe_batch_size) for _ in range(STEPB_WORKER_INITIAL_PENDING_BATCHES)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
         self.next_to_process = 0  
         self.lock = threading.Lock()
+        self.cv = threading.Condition(self.lock)
         self.running = False
     
     def start(self):
@@ -57,27 +51,23 @@ class StepBModelWorker:
             self.thread.join()
     
     def signal_stop(self):
-        with self.lock:
+        with self.cv:
             self.running = False
-        
+            self.cv.notify_all()
+
 
     def push_to_pending_batches(self, vision_data_batcher):
-        '''Add data to pending batches and signal via queue'''
         for qid in vision_data_batcher.question_ids:
             self.parent.tl.log(20000, qid, 0, self.parent.my_id)
         num_questions = vision_data_batcher.question_ids.shape[0]
         question_added = 0
-        while question_added < num_questions and self.running:
-            space_available = False
-            
-            # Use lock only for the batch modification
-            with self.lock:
+        space_left = 0
+        while question_added < num_questions:
+            with self.cv:
                 self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
-                
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
-                
                 # Find the idx in the pending_batches to add the data
                 while space_left == 0:
                     free_batch = (free_batch + 1) % len(self.pending_batches)
@@ -86,42 +76,37 @@ class StepBModelWorker:
                     if free_batch == initial_batch:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
-                
-                if space_left > 0:
-                    space_available = True
+                if space_left != 0:
                     self.next_batch = free_batch
                     question_start_idx = question_added
                     end_idx = self.pending_batches[free_batch].add_data(vision_data_batcher, question_start_idx)
                     question_added = end_idx
-                    
                     for qid in vision_data_batcher.question_ids[question_start_idx:end_idx]:
                         self.parent.tl.log(20051, qid, 0, self.parent.my_id)
-                    
                     if self.pending_batches[free_batch].space_left() == 0:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                         if self.next_batch == self.current_batch:
                             self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
-                    # signal main_loop thread
-                    self.data_ready_queue.put("DATA_READY")
-                    
-            if not space_available:
-                try:
-                    signal = self.space_available_queue.get(timeout=self.batch_time_us/1000000)
-                    if signal == "STOP":
-                        break
-                    self.space_available_queue.task_done()
-                except Empty:
-                    pass
+                    self.cv.notify()
+            if space_left == 0:
+                # # Yield control to allow other threads to run.
+                time.sleep(self.batch_time_us / 2000000)
             
+        # for qid in vision_data_batcher.question_ids:
+        #     self.parent.tl.log(20050, qid, 0, 0)
 
     def main_loop(self):
         batch = None
         while self.running:
             if not batch is None:
                 batch.reset()
-            batch_found = False
-            with self.lock:
+            with self.cv:
                 self.current_batch = -1
+                if self.pending_batches[self.next_to_process].num_pending == 0:
+                    for i in range(len(self.pending_batches)):
+                        self.parent.tl.log(20010, i, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
+                    self.cv.wait(timeout=self.batch_time_us/1000000)
+                    
                 if self.pending_batches[self.next_to_process].num_pending != 0:
                     self.current_batch = self.next_to_process
                     self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
@@ -131,39 +116,31 @@ class StepBModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
                         
                     self.pending_batches[self.current_batch] = PendingVisionDataBatcher(self.max_exe_batch_size)
-                    batch_found = True
-                    self.space_available_queue.put("SPACE_AVAILABLE")
-            if not batch_found:
-                try:
-                    signal = self.data_ready_queue.get(timeout=self.batch_time_us/1000000)
-                    if signal == "STOP":
-                        break
-                    self.data_ready_queue.task_done()
-                except Empty:
-                    continue   
-
+                    self.cv.notify_all()
+                    
             if not self.running:
                 break
+            if self.current_batch == -1 or not batch:
+                continue
             
-            if batch_found and batch is not None:
-                for qid in batch.question_ids[:batch.num_pending]:
-                    self.parent.tl.log(20020, qid, self.next_batch, batch.num_pending)
-                # Execute the batch
-                # TODO: use direct memory sharing via pointer instead of copying to the host
-                input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
-                vision_embeddings, vision_second_last_layer_hidden_states = self.vision_encoder.execVisionEncoder(input_tensor, batch.num_pending)
-                
-                for qid in batch.question_ids[:batch.num_pending]:
-                    self.parent.tl.log(20021, qid, 0, batch.num_pending)
-                            
-                # TODO: directly batch in the GPU to avoid this GPU to host fetch 
-                self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
-                                                    vision_second_last_layer_hidden_states.cpu().detach().numpy(),
-                                                    batch.question_ids,
-                                                    batch.num_pending)
-                
-                for qid in batch.question_ids[:batch.num_pending]:
-                    self.parent.tl.log(20041, qid, 0, 0)
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(20020, qid, self.next_batch, batch.num_pending)
+            # Execute the batch
+            # TODO: use direct memory sharing via pointer instead of copying to the host
+            input_tensor = torch.as_tensor(batch.pixel_values[:batch.num_pending,:,:,:,:], dtype=torch.long, device="cuda") 
+            vision_embeddings, vision_second_last_layer_hidden_states = self.vision_encoder.execVisionEncoder(input_tensor, batch.num_pending)
+            
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(20021, qid, 0, batch.num_pending)
+                        
+            # TODO: directly batch in the GPU to avoid this GPU to host fetch 
+            self.parent.emit_worker.add_to_buffer(vision_embeddings.cpu().detach().numpy(),
+                                                vision_second_last_layer_hidden_states.cpu().detach().numpy(),
+                                                batch.question_ids,
+                                                batch.num_pending)
+            
+            for qid in batch.question_ids[:batch.num_pending]:
+                self.parent.tl.log(20041, qid, 0, 0)
             
             
             
