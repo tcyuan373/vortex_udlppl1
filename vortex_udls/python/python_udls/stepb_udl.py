@@ -62,8 +62,10 @@ class StepBModelWorker:
         question_added = 0
         while question_added < num_questions:
             with self.cv:
-                has_space = self.cv.wait_for(
-                    lambda: any(batch.space_left() > 0 for batch in self.pending_batches),
+                self.cv.wait_for(
+                    lambda: any(batch.space_left() > 0
+                                for i, batch in enumerate(self.pending_batches)
+                                if i != self.current_batch),
                     timeout=self.batch_time_us / 1000000
                 )
                 
@@ -92,7 +94,7 @@ class StepBModelWorker:
                     self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                     if self.next_batch == self.current_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
-            self.cv.notify()
+                self.cv.notify()
             
         for qid in vision_data_batcher.question_ids:
             self.parent.tl.log(20050, qid, 0, 0)
