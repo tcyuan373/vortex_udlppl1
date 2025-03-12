@@ -169,8 +169,8 @@ class StepBEmitWorker:
     
     def start(self):
         self.running = True
-        self.thread = threading.Thread(target=self.main_loop)
-        self.thread.start()
+        # self.thread = threading.Thread(target=self.main_loop)
+        # self.thread.start()
     
     def join(self):
         if self.thread is not None:
@@ -195,9 +195,12 @@ class StepBEmitWorker:
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                      vision_second_last_layer_hidden_states[i].view(), 
                                                      question_ids[i].view())
-                
-               
-            self.cv.notify()
+            
+            to_send = self.send_buffer
+            # Below is shallow copy, to avoid deep copy of the data
+            self.send_buffer = [StepBResultBatchManager() for _ in range(len(self.parent.stepb_next_udl_shards))]
+            self.process_and_emit_results(to_send)
+            # self.cv.notify()
             
     def process_and_emit_results(self, to_send):
         for idx, batch_manager in enumerate(to_send):
