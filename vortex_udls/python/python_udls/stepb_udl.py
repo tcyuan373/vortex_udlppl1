@@ -189,8 +189,8 @@ class StepBEmitWorker:
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
                 # Give priority to sending thread
-                if self.send_buffer[shard_pos].num_queries >= self.max_emit_batch_size:
-                    self.cv.wait(timeout=self.parent.batch_time_us/1000000)
+                # if self.send_buffer[shard_pos].num_queries >= self.max_emit_batch_size:
+                #     self.cv.wait(timeout=self.parent.batch_time_us/1000000)
                 
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                      vision_second_last_layer_hidden_states[i].view(), 
