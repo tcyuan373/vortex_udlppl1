@@ -58,7 +58,7 @@ class StepBModelWorker:
 
     def push_to_pending_batches(self, vision_data_batcher):
         for qid in vision_data_batcher.question_ids:
-            self.parent.tl.log(20000, qid, 0, 0)
+            self.parent.tl.log(20000, qid, 0, self.parent.my_id)
         num_questions = vision_data_batcher.question_ids.shape[0]
         question_added = 0
         while question_added < num_questions:
