@@ -102,11 +102,12 @@ class StepBModelWorker:
             with self.cv:
                 self.current_batch = -1
                 if self.pending_batches[self.next_to_process].num_pending == 0:
-                    for i in range(len(self.pending_batches)):
-                        self.parent.tl.log(20010, i, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
+                    
                     self.cv.wait(timeout=self.batch_time_us/1000000)
                     
                 if self.pending_batches[self.next_to_process].num_pending != 0:
+                    for i in range(len(self.pending_batches)):
+                        self.parent.tl.log(20010, i, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
                     self.current_batch = self.next_to_process
                     self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
                     batch = self.pending_batches[self.current_batch]
