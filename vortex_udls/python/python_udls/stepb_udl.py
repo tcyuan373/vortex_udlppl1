@@ -42,6 +42,14 @@ class StepBModelWorker:
         self.running = False
     
     def start(self):
+        # Try to set higher priority for the worker thread
+        try:
+            thread_id = self.thread.ident
+            # Use setpriority to increase the priority (lower nice value)
+            os.setpriority(os.PRIO_PROCESS, thread_id, -10)
+            print(f"Successfully set worker thread {self.my_thread_id} to higher priority")
+        except (ImportError, AttributeError, PermissionError, OSError) as e:
+            print(f"Could not set worker thread priority: {e}")
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
         self.thread.start()
@@ -269,11 +277,6 @@ class StepBUDL(UserDefinedLogic):
         '''
         Start the worker threads
         '''
-        try:
-            os.nice(10)
-            print("Set main thread to lower priority")
-        except:
-            print("Could not adjust main thread priority")
             
         if not self.model_worker:
             self.model_worker = StepBModelWorker(self, 1)
