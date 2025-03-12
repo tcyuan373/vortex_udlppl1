@@ -90,6 +90,7 @@ class StepBModelWorker:
                     self.cv.notify()
             if space_left == 0:
                 # # Yield control to allow other threads to run.
+                self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
                 time.sleep(self.batch_time_us / 500000)
             
 
@@ -114,7 +115,6 @@ class StepBModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
                         
                     self.pending_batches[self.current_batch] = PendingVisionDataBatcher(self.max_exe_batch_size)
-                    self.cv.notify_all()
                     
             if not self.running:
                 break
@@ -139,7 +139,9 @@ class StepBModelWorker:
             
             for qid in batch.question_ids[:batch.num_pending]:
                 self.parent.tl.log(20041, qid, 0, 0)
-            
+                
+            with self.cv:
+                self.cv.notify()
             
             
 
