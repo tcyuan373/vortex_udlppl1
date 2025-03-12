@@ -69,7 +69,7 @@ class StepBModelWorker:
                             if i != self.current_batch),
                     timeout=self.batch_time_us/1000000
                 )
-                
+                self.parent.tl.log(20050, 1, 0, self.parent.my_id)
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
@@ -88,10 +88,13 @@ class StepBModelWorker:
                     # self.pending_batches.append(new_batch)  
                     # free_batch = len(self.pending_batches) - 1
                     # space_left = self.pending_batches[free_batch].space_left()
+                
                 self.next_batch = free_batch
                 question_start_idx = question_added
                 end_idx = self.pending_batches[free_batch].add_data(vision_data_batcher, question_start_idx)
                 question_added = end_idx
+                for qid in vision_data_batcher.question_ids[question_start_idx:end_idx]:
+                    self.parent.tl.log(20051, qid, 0, self.parent.my_id)
                 if self.pending_batches[free_batch].space_left() == 0:
                     self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                     if self.next_batch == self.current_batch:
@@ -100,8 +103,8 @@ class StepBModelWorker:
             # # Yield control to allow other threads to run.
             # time.sleep(self.batch_time_us / 2000000)
             
-        for qid in vision_data_batcher.question_ids:
-            self.parent.tl.log(20050, qid, 0, 0)
+        # for qid in vision_data_batcher.question_ids:
+        #     self.parent.tl.log(20050, qid, 0, 0)
 
     def main_loop(self):
         batch = None
