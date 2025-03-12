@@ -90,10 +90,8 @@ class StepBModelWorker:
                     self.cv.notify()
             if space_left == 0:
                 # # Yield control to allow other threads to run.
-                time.sleep(self.batch_time_us / 2000000)
+                time.sleep(self.batch_time_us / 500000)
             
-        # for qid in vision_data_batcher.question_ids:
-        #     self.parent.tl.log(20050, qid, 0, 0)
 
     def main_loop(self):
         batch = None
