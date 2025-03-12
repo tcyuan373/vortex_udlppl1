@@ -118,6 +118,10 @@ class StepBModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                        
+                    self.pending_batches[self.current_batch].reset()
+                    self.cv.notify_all()
+                    
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
@@ -141,8 +145,7 @@ class StepBModelWorker:
             
             for qid in batch.question_ids[:batch.num_pending]:
                 self.parent.tl.log(20041, qid, 0, 0)
-            self.pending_batches[self.current_batch].reset()
-            self.cv.notify_all()
+            
             
             
 
