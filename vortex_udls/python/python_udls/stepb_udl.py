@@ -116,6 +116,7 @@ class StepBModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
                         
                     self.pending_batches[self.current_batch] = PendingVisionDataBatcher(self.max_exe_batch_size)
+                    self.cv.notify()
                     
             if not self.running:
                 break
@@ -141,8 +142,7 @@ class StepBModelWorker:
             for qid in batch.question_ids[:batch.num_pending]:
                 self.parent.tl.log(20041, qid, 0, 0)
                 
-            with self.cv:
-                self.cv.notify()
+            
             
             
 
