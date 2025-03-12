@@ -63,10 +63,11 @@ class StepBModelWorker:
         question_added = 0
         while question_added < num_questions:
             with self.cv:
-                self.cv.wait_for(
+                wait_result = self.cv.wait_for(
                     lambda: any(batch.space_left() > 0
-                                for i, batch in enumerate(self.pending_batches)
-                                if i != self.current_batch)
+                            for i, batch in enumerate(self.pending_batches)
+                            if i != self.current_batch),
+                    timeout=self.batch_time_us/1000000
                 )
                 
                 free_batch = self.next_batch
@@ -81,11 +82,12 @@ class StepBModelWorker:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
-                    self.cv.wait(timeout=self.batch_time_us/1000000) # yield to allow processing thread to run
-                    new_batch = PendingVisionDataBatcher(self.max_exe_batch_size)
-                    self.pending_batches.append(new_batch)  
-                    free_batch = len(self.pending_batches) - 1
-                    space_left = self.pending_batches[free_batch].space_left()
+                    continue
+                    # self.cv.wait(timeout=self.batch_time_us/1000000) # yield to allow processing thread to run
+                    # new_batch = PendingVisionDataBatcher(self.max_exe_batch_size)
+                    # self.pending_batches.append(new_batch)  
+                    # free_batch = len(self.pending_batches) - 1
+                    # space_left = self.pending_batches[free_batch].space_left()
                 self.next_batch = free_batch
                 question_start_idx = question_added
                 end_idx = self.pending_batches[free_batch].add_data(vision_data_batcher, question_start_idx)
@@ -95,8 +97,8 @@ class StepBModelWorker:
                     if self.next_batch == self.current_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                 self.cv.notify()
-            # Yield control to allow other threads to run.
-            time.sleep(self.batch_time_us / 2000000)
+            # # Yield control to allow other threads to run.
+            # time.sleep(self.batch_time_us / 2000000)
             
         for qid in vision_data_batcher.question_ids:
             self.parent.tl.log(20050, qid, 0, 0)
