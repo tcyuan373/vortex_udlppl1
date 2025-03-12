@@ -119,7 +119,7 @@ class StepBModelWorker:
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
                         
-                    self.pending_batches[self.current_batch].reset()
+                    self.pending_batches[self.current_batch] = PendingVisionDataBatcher(self.max_exe_batch_size)
                     self.cv.notify_all()
                     
             if not self.running:
