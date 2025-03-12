@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import os
 import json
 import numpy as np
 import threading
 import torch
+import time
 
 from VisionEncoder import VisionEncoder
 
@@ -45,14 +45,6 @@ class StepBModelWorker:
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
         self.thread.start()
-        # Try to set higher priority for the worker thread
-        try:
-            thread_id = self.thread.ident
-            # Use setpriority to increase the priority (lower nice value)
-            os.setpriority(os.PRIO_PROCESS, thread_id, -10)
-            print(f"Successfully set worker thread {self.my_thread_id} to higher priority")
-        except (ImportError, AttributeError, PermissionError, OSError) as e:
-            print(f"Could not set worker thread priority: {e}")
     
     def join(self):
         if self.thread is not None:
@@ -83,6 +75,7 @@ class StepBModelWorker:
                         break
                     space_left = self.pending_batches[free_batch].space_left()
                 if space_left == 0:
+                    time.sleep(0.005) # yield to allow processing thread to run
                     new_batch = PendingVisionDataBatcher(self.max_exe_batch_size)
                     self.pending_batches.append(new_batch)  
                     free_batch = len(self.pending_batches) - 1
