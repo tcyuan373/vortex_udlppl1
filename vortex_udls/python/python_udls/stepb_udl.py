@@ -69,7 +69,7 @@ class StepBModelWorker:
                             if i != self.current_batch),
                     timeout=self.batch_time_us/1000000
                 )
-                self.parent.tl.log(20050, 1, 0, self.parent.my_id)
+                self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], 0, 0)
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
