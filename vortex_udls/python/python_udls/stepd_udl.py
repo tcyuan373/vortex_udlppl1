@@ -47,8 +47,8 @@ class StepCDModelWorker:
         self.cv = threading.Condition(self.lock)
         self.running = False
         
+        self.new_space_available = True
         
-
     def start(self):
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
@@ -69,6 +69,13 @@ class StepCDModelWorker:
         Adding the intermediate result one-by-one since they are aggregated one-by-one at the UDL side
         '''
         with self.cv:
+            while True:
+                if not self.new_space_available:
+                    self.cv.wait(timeout=3)
+                if not self.running:
+                    break
+                if self.new_space_available:
+                    break
             free_batch = self.next_batch
             space_left = self.pending_batches[free_batch].space_left()
             initial_batch = free_batch
@@ -80,24 +87,19 @@ class StepCDModelWorker:
                 if free_batch == initial_batch:
                     break
                 space_left = self.pending_batches[free_batch].space_left()
-            if space_left == 0:
-                # Need to create new batch, if all the pending_batches are full
-                new_batch = PendingStepCDDataBatcher(self.max_exe_batch_size)
-                self.pending_batches.append(new_batch)  
-                free_batch = len(self.pending_batches) - 1
-                space_left = self.pending_batches[free_batch].space_left()
+            if space_left != 0:
+                # add the intermediate result to the pending batch
+                self.pending_batches[free_batch].add_data(intermediate_result)
                 
-            # add the intermediate result to the pending batch
-            self.pending_batches[free_batch].add_data(intermediate_result)
-            
-            self.next_batch = free_batch
-            #  if we complete filled the buffer, cycle to the next
-            if self.pending_batches[free_batch].space_left() == 0:
-                self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
-                if self.next_batch == self.current_batch:
+                self.next_batch = free_batch
+                #  if we complete filled the buffer, cycle to the next
+                if self.pending_batches[free_batch].space_left() == 0:
                     self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
-                    
-            self.cv.notify()
+                    if self.next_batch == self.current_batch:
+                        self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
+                self.cv.notify()
+            else:
+                self.new_space_available = False
             
 
     def main_loop(self):
@@ -117,6 +119,9 @@ class StepCDModelWorker:
                     
                     if self.current_batch == self.next_batch:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
+                    self.new_space_available = True
+                    self.cv.notify()
+                    
             if not self.running:
                 break
             if self.current_batch == -1 or not batch:
