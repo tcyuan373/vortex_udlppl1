@@ -18,8 +18,8 @@ STEPD_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPD_NEXT_UDL_SUBGROUP_INDEX = 0
 STEPD_NEXT_UDL_PREFIX = "/stepE"
 # Initial number of pending batches smaller, because they are allocated on GPU, 
-# if the max_exec_batch_size is 16, it takes 3 * 18MB memory on GPU
-STEPCD_WORKER_INITIAL_PENDING_BATCHES = 3
+# if the max_exec_batch_size is 16, it takes 10 * 18MB memory on GPU
+STEPCD_WORKER_INITIAL_PENDING_BATCHES = 20
 
 
 class StepCDModelWorker:
