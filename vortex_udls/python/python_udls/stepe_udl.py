@@ -33,6 +33,8 @@ class StepEModelWorker:
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
         self.running = False
+        
+        self.new_space_available = True
     
     def start(self):
         self.running = True
