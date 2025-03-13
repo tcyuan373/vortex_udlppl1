@@ -41,6 +41,8 @@ class StepBModelWorker:
         self.cv = threading.Condition(self.lock)
         self.running = False
         
+        self.new_space_available = False
+        
     def start(self):
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
@@ -62,8 +64,15 @@ class StepBModelWorker:
         num_questions = vision_data_batcher.question_ids.shape[0]
         question_added = 0
         space_left = 0
-        while question_added < num_questions:
+        while question_added < num_questions:            
             with self.cv:
+                while True:
+                    if not self.new_space_available:
+                        self.cv.wait(timeout=3)
+                    if not self.running:
+                        break
+                    if self.new_space_available:
+                        break
                 self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
@@ -89,11 +98,7 @@ class StepBModelWorker:
                             self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                     self.cv.notify()
                 else:
-                    self.cv.wait(timeout=3)
-            if space_left == 0:
-                # # Yield control to allow other threads to run.
-                self.parent.tl.log(10040, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
-                time.sleep(self.batch_time_us/1000000)
+                    self.new_space_available = False
             
 
     def main_loop(self):
@@ -104,12 +109,11 @@ class StepBModelWorker:
             with self.cv:
                 self.current_batch = -1
                 if self.pending_batches[self.next_to_process].num_pending == 0:
-                    
                     self.cv.wait(timeout=self.batch_time_us/1000000)
                     
                 if self.pending_batches[self.next_to_process].num_pending != 0:
-                    for i in range(len(self.pending_batches)):
-                        self.parent.tl.log(20010, i, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
+                    for qid in self.pending_batches[self.next_to_process]:
+                        self.parent.tl.log(20010, qid, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
                     self.current_batch = self.next_to_process
                     self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
                     batch = self.pending_batches[self.current_batch]
@@ -118,6 +122,7 @@ class StepBModelWorker:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches) 
                         
                     self.pending_batches[self.current_batch] = PendingVisionDataBatcher(self.max_exe_batch_size)
+                    self.new_space_available = True
                     self.cv.notify()
                     
             if not self.running:
