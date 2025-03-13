@@ -41,7 +41,7 @@ class StepBModelWorker:
         self.cv = threading.Condition(self.lock)
         self.running = False
         
-        self.new_space_available = False
+        self.new_space_available = True
         
     def start(self):
         self.running = True
@@ -73,6 +73,7 @@ class StepBModelWorker:
                         break
                     if self.new_space_available:
                         break
+                    
                 self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
