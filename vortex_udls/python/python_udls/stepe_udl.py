@@ -66,7 +66,7 @@ class StepEModelWorker:
                 while True:
                     if not self.new_space_available:
                         self.parent.tl.log(40021, text_data_batcher.question_ids[question_added],0, 0)
-                        self.cv.wait(timeout=self.batch_time_us/1000000)
+                        self.cv.wait(timeout=10)
                     if not self.running:
                         break
                     if self.new_space_available:
