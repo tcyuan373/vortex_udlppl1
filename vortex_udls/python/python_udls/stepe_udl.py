@@ -90,7 +90,7 @@ class StepEModelWorker:
                     end_idx = self.pending_batches[free_batch].add_data(text_data_batcher, question_start_idx)
                     question_added = end_idx
                     for qid in text_data_batcher.question_ids[question_start_idx:end_idx]:
-                        self.parent.tl.log(40001, qid, self.current_batch, self.pending_batches[self.next_batch].num_pending)
+                        self.parent.tl.log(40001, qid, free_batch, self.pending_batches[self.next_batch].num_pending)
                     #  if we complete filled the buffer, cycle to the next
                     if self.pending_batches[free_batch].space_left() == 0:
                         self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
