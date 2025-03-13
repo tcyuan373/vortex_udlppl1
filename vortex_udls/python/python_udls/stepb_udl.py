@@ -40,7 +40,7 @@ class StepBModelWorker:
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
         self.running = False
-    
+        
     def start(self):
         self.running = True
         self.thread = threading.Thread(target=self.main_loop)
@@ -88,10 +88,12 @@ class StepBModelWorker:
                         if self.next_batch == self.current_batch:
                             self.next_batch = (self.next_batch + 1) % len(self.pending_batches)
                     self.cv.notify()
+                else:
+                    self.cv.wait(3)
             if space_left == 0:
                 # # Yield control to allow other threads to run.
-                self.parent.tl.log(20050, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
-                time.sleep(self.batch_time_us / 500000)
+                self.parent.tl.log(10040, vision_data_batcher.question_ids[question_added], self.pending_batches[self.next_to_process].num_pending, 0)
+                time.sleep(self.batch_time_us/1000000)
             
 
     def main_loop(self):
