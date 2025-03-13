@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 import threading
-import time
+import torch
 import os
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
@@ -61,15 +61,17 @@ class StepEModelWorker:
         num_questions = len(text_data_batcher.question_ids)
         question_added = 0
         while question_added < num_questions:
-            while not self.new_space_available:
-                self.parent.tl.log(40021, text_data_batcher.question_ids[question_added],0, 0)
-                time.sleep(0.1)
-                if not self.running:
-                    break
-                if self.new_space_available:
-                    break
             with self.cv:
-                # Block if no space available at the pending queue   
+                # Block if no space available at the pending queue
+                while True:
+                    if not self.new_space_available:
+                        self.parent.tl.log(40021, text_data_batcher.question_ids[question_added],0, 0)
+                        self.cv.wait(timeout=self.batch_time_us/1000000)
+                    if not self.running:
+                        break
+                    if self.new_space_available:
+                        break
+                    
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
