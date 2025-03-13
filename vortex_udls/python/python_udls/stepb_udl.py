@@ -113,7 +113,7 @@ class StepBModelWorker:
                     self.cv.wait(timeout=self.batch_time_us/1000000)
                     
                 if self.pending_batches[self.next_to_process].num_pending != 0:
-                    for qid in self.pending_batches[self.next_to_process]:
+                    for qid in self.pending_batches[self.next_to_process].question_ids:
                         self.parent.tl.log(20010, qid, self.pending_batches[self.next_to_process].num_pending, self.next_to_process)
                     self.current_batch = self.next_to_process
                     self.next_to_process = (self.next_to_process + 1) % len(self.pending_batches)
