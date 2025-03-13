@@ -61,17 +61,15 @@ class StepEModelWorker:
         num_questions = len(text_data_batcher.question_ids)
         question_added = 0
         while question_added < num_questions:
+            while not self.new_space_available:
+                self.parent.tl.log(40021, text_data_batcher.question_ids[question_added],0, 0)
+                time.sleep(0.1)
+                if not self.running:
+                    break
+                if self.new_space_available:
+                    break
             with self.cv:
-                # Block if no space available at the pending queue
-                
-                while not self.new_space_available:
-                    self.parent.tl.log(40021, text_data_batcher.question_ids[question_added],0, 0)
-                    time.sleep(0.1)
-                    if not self.running:
-                        break
-                    if self.new_space_available:
-                        break
-                    
+                # Block if no space available at the pending queue   
                 free_batch = self.next_batch
                 space_left = self.pending_batches[free_batch].space_left()
                 initial_batch = free_batch
