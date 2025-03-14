@@ -123,7 +123,8 @@
                         "max_exe_batch_size":32,
                         "batch_time_us":1000,
                         "max_emit_batch_size":16,
-                        "stepd_next_udl_shards":[2,4,5]
+                        "stepd_next_udl_shards":[2,4,5],
+                        "weighted_indices":[0,0,1,2]
                     }],
                 "destinations": [{"/stepE":"put"}]
             },
