@@ -11,9 +11,7 @@ from derecho.cascade.member_client import TimestampLogger
 from stepe_search import StepESearch
 from serialize_utils import StepDMessageBatcher, PendingSearchBatcher
 
-import psutil
 
-CPU_AFFINITY_SETS = [[8,9,10,11,12,13,14,15], [32,33,34,35,36,37,38,39], [40,41,42,43,44,45,46,47]]
 STEPE_WORKER_INITIAL_PENDING_BATCHES = 3
 
 class StepEModelWorker:
@@ -175,9 +173,6 @@ class StepEUDL(UserDefinedLogic):
         '''
         Start the worker threads
         '''
-        p = psutil.Process()
-        my_affinity_set = CPU_AFFINITY_SETS[self.my_id - 4]
-        p.cpu_affinity(my_affinity_set)
         if not self.model_worker:
             self.model_worker = StepEModelWorker(self, 1)
             self.model_worker.start()
