@@ -171,8 +171,8 @@ class StepBEmitWorker:
     
     def start(self):
         self.running = True
-        # self.thread = threading.Thread(target=self.main_loop)
-        # self.thread.start()
+        self.thread = threading.Thread(target=self.main_loop)
+        self.thread.start()
     
     def join(self):
         if self.thread is not None:
@@ -192,19 +192,11 @@ class StepBEmitWorker:
             self.parent.tl.log(10031, qid, 0, 0)
         for i in range(num_pending):
             shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
-            # Give priority to sending thread
-            # if self.send_buffer[shard_pos].num_queries >= self.max_emit_batch_size:
-            #     self.cv.wait(timeout=self.parent.batch_time_us/1000000)
-            
+
             self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                     vision_second_last_layer_hidden_states[i].view(), 
                                                     question_ids[i].view())
-        
-        to_send = self.send_buffer
-        # Below is shallow copy, to avoid deep copy of the data
-        self.send_buffer = [StepBResultBatchManager() for _ in range(len(self.parent.stepb_next_udl_shards))]
-        self.process_and_emit_results(to_send)
-        # self.cv.notify()
+        self.cv.notify()
             
     def process_and_emit_results(self, to_send):
         for idx, batch_manager in enumerate(to_send):
