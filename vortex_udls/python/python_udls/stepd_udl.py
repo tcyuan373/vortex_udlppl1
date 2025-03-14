@@ -245,7 +245,8 @@ class StepCDEmitWorker:
             # serialize the batch
             batch_np = batch.serialize()
             # send to a evenly chosen shard
-            shard_idx = self.parent.stepd_next_udl_shards[(self.sent_batch_counter % len(self.parent.stepd_next_udl_shards))]
+            weighted_pos = self.parent.weighted_indices[self.sent_batch_counter % len(self.parent.weighted_indices)]
+            shard_idx = self.parent.stepd_next_udl_shards[weighted_pos]
             new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
             
             for qid in batch.question_ids:
@@ -287,6 +288,7 @@ class StepCDUDL(UserDefinedLogic):
         self.max_emit_batch_size = self.conf["max_emit_batch_size"]
         
         self.stepd_next_udl_shards = self.conf.get("stepd_next_udl_shards", [2])
+        self.weighted_indices = self.conf.get("weighted_indices", [0])
         # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}
         

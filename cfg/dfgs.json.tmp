@@ -79,11 +79,12 @@
                         "module":"stepa_udl",
                         "entry_class":"StepAUDL",
                         "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
-                        "local_encoder_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_A_query_text_encoder.pt",
-                        "local_projection_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_A_query_text_linear.pt",
-                        "max_exe_batch_size":10,
-                        "batch_time_us":100,
-                        "max_emit_batch_size":3
+                        "local_encoder_path":"/mydata/EVQA/models/models_step_A_query_text_encoder.pt",
+                        "local_projection_path":"/mydata/EVQA/models/models_step_A_query_text_linear.pt",
+                        "max_exe_batch_size":6,
+                        "batch_time_us":1000,
+                        "max_emit_batch_size":6,
+                        "stepa_next_udl_shards":[3]
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -97,11 +98,12 @@
                         "module":"stepb_udl",
                         "entry_class":"StepBUDL",
                         "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
-                        "local_encoder_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_B_vision_encoder.pt",
-                        "local_projection_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_B_vision_projection.pt",
+                        "local_encoder_path":"/mydata/EVQA/models/models_step_B_vision_encoder.pt",
+                        "local_projection_path":"/mydata/EVQA/models/models_step_B_vision_projection.pt",
                         "max_exe_batch_size":16,
-                        "batch_time_us":100,
-                        "max_emit_batch_size":8
+                        "batch_time_us":10000,
+                        "max_emit_batch_size":4,
+                        "stepb_next_udl_shards":[3]
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -115,12 +117,14 @@
                         "module":"stepd_udl",
                         "entry_class":"StepCDUDL",
                         "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
-                        "local_stepc_model_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_C_transformer_mapping_input_linear.pt",
-                        "local_tf_mapping_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_D_transformer_mapping.pt",
-                        "local_tf_mapping_output_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_D_transformer_mapping_output.pt",
-                        "max_exe_batch_size":16,
-                        "batch_time_us":100,
-                        "max_emit_batch_size":8
+                        "local_stepc_model_path":"/mydata/EVQA/models/models_step_C_transformer_mapping_input_linear.pt",
+                        "local_tf_mapping_path":"/mydata/EVQA/models/models_step_D_transformer_mapping.pt",
+                        "local_tf_mapping_output_path":"/mydata/EVQA/models/models_step_D_transformer_mapping_output.pt",
+                        "max_exe_batch_size":32,
+                        "batch_time_us":1000,
+                        "max_emit_batch_size":16,
+                        "stepd_next_udl_shards":[2,4,5],
+                        "weighted_indices":[0,0,1,2]
                     }],
                 "destinations": [{"/stepE":"put"}]
             },
@@ -133,12 +137,12 @@
                         "python_path":["python_udls"],
                         "module":"stepe_udl",
                         "entry_class":"StepEUDL",
-                        "index_root_path":"/mnt/nvme0/vortex_pipeline1/index/",
+                        "index_root_path":"/mydata/EVQA/index/",
                         "index_experiment_name":"EVQA_train_split/",
                         "index_name":"EVQA_PreFLMR_ViT-L",
-                        "max_exe_batch_size":16,
-                        "batch_time_us":100,
-                        "flush_qid":166499
+                        "max_exe_batch_size":32,
+                        "batch_time_us":1000,
+                        "flush_qid":166999
                     }],
                 "destinations": [{}]
             }
@@ -157,14 +161,14 @@
                         "python_path":["python_udls"],
                         "module":"monolithic_udl",
                         "entry_class":"MonolithicUDL",
-                        "index_root_path":"/mnt/nvme0/vortex_pipeline1/index/",
+                        "index_root_path":"/mydata/EVQA/index/",
                         "index_name":"EVQA_PreFLMR_ViT-L",
                         "index_experiment_name":"EVQA_train_split",
                         "checkpoint_path":"LinWeizheDragon/PreFLMR_ViT-L",
                         "image_processor_name":"openai/clip-vit-large-patch14",
-                        "max_exe_batch_size":16,
+                        "max_exe_batch_size":1,
                         "batch_time_us":100,
-                        "flush_qid":166499
+                        "flush_qid":166999
                     }],
                 "destinations": [{}]
             }
