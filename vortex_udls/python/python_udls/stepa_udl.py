@@ -12,6 +12,8 @@ from derecho.cascade.member_client import TimestampLogger
 from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTextDataBatcher
 from TextEncoder import TextEncoder
 
+import psutil
+
 
 STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
@@ -274,6 +276,8 @@ class StepAUDL(UserDefinedLogic):
         '''
         Start the worker threads
         '''
+        p = psutil.Process()
+        p.cpu_affinity([0, 1, 2, 3, 4, 5, 6, 7])
         if not self.model_worker:
             self.model_worker = StepAModelWorker(self, 1)
             self.model_worker.start()
@@ -284,6 +288,7 @@ class StepAUDL(UserDefinedLogic):
         '''
         The off-critical data path handler
         '''
+        
         # Only start the model_worker if this UDL is triggered on this node
         if not self.model_worker:
             self.start_threads()
