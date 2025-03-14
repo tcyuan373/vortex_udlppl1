@@ -187,16 +187,16 @@ class StepBEmitWorker:
         '''
         pass by object reference to avoid deep-copy
         '''
-        # with self.cv:
-        for qid in question_ids[:num_pending]:
-            self.parent.tl.log(10031, qid, 0, 0)
-        for i in range(num_pending):
-            shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
+        with self.cv:
+            for qid in question_ids[:num_pending]:
+                self.parent.tl.log(10031, qid, 0, 0)
+            for i in range(num_pending):
+                shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
 
-            self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
-                                                    vision_second_last_layer_hidden_states[i].view(), 
-                                                    question_ids[i].view())
-        self.cv.notify()
+                self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
+                                                        vision_second_last_layer_hidden_states[i].view(), 
+                                                        question_ids[i].view())
+            self.cv.notify()
             
     def process_and_emit_results(self, to_send):
         for idx, batch_manager in enumerate(to_send):
