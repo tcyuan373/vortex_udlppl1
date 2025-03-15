@@ -145,7 +145,7 @@
                         "index_name":"EVQA_PreFLMR_ViT-L",
                         "max_exe_batch_size":32,
                         "batch_time_us":1000,
-                        "num_pending_buffer":10
+                        "num_pending_buffer":10,
                         "flush_qid":166999
                     }],
                 "destinations": [{}]
