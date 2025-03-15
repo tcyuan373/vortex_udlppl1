@@ -243,7 +243,8 @@ class StepCDEmitWorker:
             # serialize the batch
             batch_np = batch.serialize()
             # send to a evenly chosen shard
-            shard_idx = self.parent.stepd_next_udl_shards[(self.sent_batch_counter % len(self.parent.stepd_next_udl_shards))]
+            weighted_pos = self.parent.weighted_indices[self.sent_batch_counter % len(self.parent.weighted_indices)]
+            shard_idx = self.parent.stepd_next_udl_shards[weighted_pos]
             new_key = STEPD_NEXT_UDL_PREFIX + "/stepD_{self.sent_batch_counter}"
             
             for qid in batch.question_ids:
@@ -288,6 +289,7 @@ class StepCDUDL(UserDefinedLogic):
         # Initial number of pending batches smaller, because they are allocated on GPU, 
         # if the max_exec_batch_size is 16, it takes 20 * 18MB memory on GPU
         self.num_pending_buffer = self.conf.get("num_pending_buffer", 20)
+        self.weighted_indices = self.conf.get("weighted_indices", [0])
         # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}
         
