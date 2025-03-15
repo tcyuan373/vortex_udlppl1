@@ -17,9 +17,7 @@ from serialize_utils import (StepCDIntermediateResult,
 STEPD_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPD_NEXT_UDL_SUBGROUP_INDEX = 0
 STEPD_NEXT_UDL_PREFIX = "/stepE"
-# Initial number of pending batches smaller, because they are allocated on GPU, 
-# if the max_exec_batch_size is 16, it takes 10 * 18MB memory on GPU
-STEPCD_WORKER_INITIAL_PENDING_BATCHES = 20
+
 
 
 class StepCDModelWorker:
@@ -37,7 +35,7 @@ class StepCDModelWorker:
     
         self.max_exe_batch_size = self.parent.max_exe_batch_size
         self.batch_time_us = self.parent.batch_time_us
-        self.pending_batches = [PendingStepCDDataBatcher(self.max_exe_batch_size) for _ in range(STEPCD_WORKER_INITIAL_PENDING_BATCHES)]
+        self.pending_batches = [PendingStepCDDataBatcher(self.max_exe_batch_size) for _ in range(self.parent.num_pending_buffer)]
 
         
         self.current_batch = -1    # current batch idx that main is executing
@@ -158,7 +156,7 @@ class StepCDEmitWorker:
         self.parent = parent
         self.my_thread_id = thread_id
         self.max_emit_batch_size = self.parent.max_emit_batch_size
-        self.send_buffer = [StepDMessageBatcher(max_batch_size = self.max_emit_batch_size) for _ in range(STEPCD_WORKER_INITIAL_PENDING_BATCHES)]
+        self.send_buffer = [StepDMessageBatcher(max_batch_size = self.max_emit_batch_size) for _ in range(self.parent.num_pending_buffer)]
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
         # Batch send similar logic as batch exec
@@ -288,6 +286,9 @@ class StepCDUDL(UserDefinedLogic):
         self.max_emit_batch_size = self.conf["max_emit_batch_size"]
         
         self.stepd_next_udl_shards = self.conf.get("stepd_next_udl_shards", [2])
+        # Initial number of pending batches smaller, because they are allocated on GPU, 
+        # if the max_exec_batch_size is 16, it takes 20 * 18MB memory on GPU
+        self.num_pending_buffer = self.conf.get("num_pending_buffer", 20)
         self.weighted_indices = self.conf.get("weighted_indices", [0])
         # Keep track of collected intermediate results: {query_id0: StepCDIntermediateResult, query_id2:{} ...}
         self.collected_intermediate_results = {}

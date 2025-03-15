@@ -18,7 +18,6 @@ STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPA_NEXT_UDL_SUBGROUP_INDEX = 0
 
-STEPA_WORKER_INITIAL_PENDING_BATCHES = 10
 
 class StepAModelWorker:
     '''
@@ -31,7 +30,7 @@ class StepAModelWorker:
         self.max_exe_batch_size = self.parent.max_exe_batch_size
         self.batch_time_us = self.parent.batch_time_us
         self.text_encoder = TextEncoder(self.parent.checkpoint_path, self.parent.local_encoder_path, self.parent.local_projection_path)
-        self.pending_batches = [PendingTextDataBatcher(self.max_exe_batch_size) for _ in range(STEPA_WORKER_INITIAL_PENDING_BATCHES)]
+        self.pending_batches = [PendingTextDataBatcher(self.max_exe_batch_size) for _ in range(self.parent.num_pending_buffer)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
@@ -265,6 +264,7 @@ class StepAUDL(UserDefinedLogic):
         self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
         
         self.stepa_next_udl_shards = self.conf.get("stepa_next_udl_shards", [2])
+        self.num_pending_buffer = self.conf.get("num_pending_buffer", 10)
         
         self.model_worker = None
         self.emit_worker = None

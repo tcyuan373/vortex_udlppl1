@@ -84,7 +84,8 @@
                         "max_exe_batch_size":6,
                         "batch_time_us":1000,
                         "max_emit_batch_size":6,
-                        "stepa_next_udl_shards":[3]
+                        "stepa_next_udl_shards":[3],
+                        "num_pending_buffer":10
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -103,7 +104,8 @@
                         "max_exe_batch_size":16,
                         "batch_time_us":10000,
                         "max_emit_batch_size":4,
-                        "stepb_next_udl_shards":[3]
+                        "stepb_next_udl_shards":[3],
+                        "num_pending_buffer":5
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -124,7 +126,8 @@
                         "batch_time_us":1000,
                         "max_emit_batch_size":16,
                         "stepd_next_udl_shards":[2,4,5],
-                        "weighted_indices":[0,0,1,2]
+                        "weighted_indices":[0,0,1,2],
+                        "num_pending_buffer":20
                     }],
                 "destinations": [{"/stepE":"put"}]
             },
@@ -142,6 +145,7 @@
                         "index_name":"EVQA_PreFLMR_ViT-L",
                         "max_exe_batch_size":32,
                         "batch_time_us":1000,
+                        "num_pending_buffer":10
                         "flush_qid":166999
                     }],
                 "destinations": [{}]
