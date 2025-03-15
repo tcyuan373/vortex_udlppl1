@@ -83,7 +83,8 @@
                         "local_projection_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_A_query_text_linear.pt",
                         "max_exe_batch_size":10,
                         "batch_time_us":100,
-                        "max_emit_batch_size":3
+                        "max_emit_batch_size":3,
+                        "num_pending_buffer":10
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -101,7 +102,8 @@
                         "local_projection_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_B_vision_projection.pt",
                         "max_exe_batch_size":16,
                         "batch_time_us":100,
-                        "max_emit_batch_size":8
+                        "max_emit_batch_size":8,
+                        "num_pending_buffer":5
                     }],
                 "destinations": [{"/stepD":"put"}]
             },
@@ -120,7 +122,8 @@
                         "local_tf_mapping_output_path":"/mnt/nvme0/vortex_pipeline1/models/models_step_D_transformer_mapping_output.pt",
                         "max_exe_batch_size":16,
                         "batch_time_us":100,
-                        "max_emit_batch_size":8
+                        "max_emit_batch_size":8,
+                        "num_pending_buffer":20
                     }],
                 "destinations": [{"/stepE":"put"}]
             },
@@ -138,7 +141,8 @@
                         "index_name":"EVQA_PreFLMR_ViT-L",
                         "max_exe_batch_size":16,
                         "batch_time_us":100,
-                        "flush_qid":166499
+                        "flush_qid":166499,
+                        "num_pending_buffer":10
                     }],
                 "destinations": [{}]
             }

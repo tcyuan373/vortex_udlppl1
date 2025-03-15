@@ -12,7 +12,6 @@ from stepe_search import StepESearch
 from serialize_utils import StepDMessageBatcher, PendingSearchBatcher
 
 
-STEPE_WORKER_INITIAL_PENDING_BATCHES = 3
 
 class StepEModelWorker:
     '''
@@ -26,7 +25,7 @@ class StepEModelWorker:
         self.batch_time_us = self.parent.batch_time_us
         self.text_encoder = StepESearch(self.parent.index_root_path, self.parent.index_experiment_name, self.parent.index_name)
         # PendingSearchBatcher creates a batch of embeddings on CUDA
-        self.pending_batches = [PendingSearchBatcher(self.max_exe_batch_size) for _ in range(STEPE_WORKER_INITIAL_PENDING_BATCHES)]
+        self.pending_batches = [PendingSearchBatcher(self.max_exe_batch_size) for _ in range(self.parent.num_pending_buffer)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
@@ -167,6 +166,7 @@ class StepEUDL(UserDefinedLogic):
         self.max_exe_batch_size = self.conf["max_exe_batch_size"]
         self.batch_time_us = self.conf["batch_time_us"]
         self.flush_qid = self.conf["flush_qid"]
+        self.num_pending_buffer = self.conf.get("num_pending_buffer", 10)
         self.model_worker = None
     
     def start_threads(self):

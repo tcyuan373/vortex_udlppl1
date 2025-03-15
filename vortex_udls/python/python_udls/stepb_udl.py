@@ -16,7 +16,6 @@ from VisionEncoder import VisionEncoder
 from serialize_utils import PixelValueBatcher, PendingVisionDataBatcher, StepBResultBatchManager
 
 STEPB_NEXT_UDL_PREFIX = "/stepD/resultB_"
-STEPB_WORKER_INITIAL_PENDING_BATCHES = 2
 STEPB_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPB_NEXT_UDL_SUBGROUP_INDEX = 0
 
@@ -32,7 +31,7 @@ class StepBModelWorker:
         self.max_exe_batch_size = self.parent.max_exe_batch_size
         self.batch_time_us = self.parent.batch_time_us
         self.vision_encoder = VisionEncoder(self.parent.checkpoint_path, self.parent.local_encoder_path, self.parent.local_projection_path)
-        self.pending_batches = [PendingVisionDataBatcher(self.max_exe_batch_size) for _ in range(STEPB_WORKER_INITIAL_PENDING_BATCHES)]
+        self.pending_batches = [PendingVisionDataBatcher(self.max_exe_batch_size) for _ in range(self.parent.num_pending_buffer)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
@@ -282,6 +281,8 @@ class StepBUDL(UserDefinedLogic):
         self.max_emit_batch_size = int(self.conf.get("max_emit_batch_size", 5))
         
         self.stepb_next_udl_shards = self.conf.get("stepb_next_udl_shards", [2])
+        self.num_pending_buffer = self.conf.get("num_pending_buffer", 2)
+        
         
         self.model_worker = None
         self.emit_worker = None
