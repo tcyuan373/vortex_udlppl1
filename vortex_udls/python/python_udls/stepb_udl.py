@@ -187,8 +187,6 @@ class StepBEmitWorker:
         pass by object reference to avoid deep-copy
         '''
         with self.cv:
-            for qid in question_ids[:num_pending]:
-                self.parent.tl.log(10031, qid, 0, 0)
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
 
