@@ -567,9 +567,9 @@ class StepAResultBatchManager:
           - queries: concatenated UTF-8 bytes.
         After deserialization, question_ids is converted to a Python list.
         """
-        # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
-        # TODO: restructure the UDL queue mechanism to avoid this copy by blocking the new requests
-        buffer = data.copy()
+        # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
+        # # fixed already
+        # buffer = data.copy()
         offset = 0
 
         # --- Read header ---
@@ -813,9 +813,9 @@ class StepBResultBatchManager:
           - vision_embedding: array of float32, shape (batch_size, 32, 128)
           - vision_hidden_states: array of float32, shape (batch_size, 256, 1024)
         """
-        # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
-        # TODO: restructure the UDL queue mechanism to avoid this copy by blocking the new requests
-        buffer = data.copy()
+        # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
+        # # fixed already
+        # buffer = data.copy()
         offset = 0
 
         # --- Read header ---
