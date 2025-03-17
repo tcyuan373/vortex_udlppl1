@@ -245,6 +245,16 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/setup
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n8/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n9/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n10/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n11/setup
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/setup
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n12/setup
 
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/pipeline_client
@@ -258,6 +268,16 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/pipeline_client
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n8/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n9/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n10/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n11/pipeline_client
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/pipeline_client
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n12/pipeline_client
 
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/run_benchmark
@@ -271,6 +291,16 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/run_benchmark
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n8/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n9/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n10/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n11/run_benchmark
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/benchmark/run_benchmark
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n12/run_benchmark
 
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n2/start_webservice
@@ -284,6 +314,16 @@ add_custom_command(TARGET start_webservice POST_BUILD
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n6/start_webservice
     COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
         ${CMAKE_CURRENT_BINARY_DIR}/cfg/n7/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n8/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n9/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n10/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n11/start_webservice
+    COMMAND ln -sf ${CMAKE_CURRENT_BINARY_DIR}/start_webservice
+        ${CMAKE_CURRENT_BINARY_DIR}/cfg/n12/start_webservice
 
     COMMAND chmod 755 ${CMAKE_CURRENT_BINARY_DIR}/cfg/clear_log.sh.tmp
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cfg/clear_log.sh.tmp
