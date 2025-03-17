@@ -13,7 +13,199 @@ def utf8_length(s: str) -> int:
     """Computes the length of a UTF-8 encoded string without actually encoding it."""
     return sum(1 + (ord(c) >= 0x80) + (ord(c) >= 0x800) + (ord(c) >= 0x10000) for c in s)
 
+# ===============  Class and Serializer for web service client ===============
 
+class WebDataBatcher:
+    def __init__(self):
+        self.question_ids = []      # List[int]
+        self.images = []            # List[np.ndarray] with shape (1, h, w) (dtype assumed consistent)
+        self.questions = []         # List[str]
+        self.text_sequences = []    # List[str]
+        self._bytes: np.ndarray = None
+
+    def serialize(self) -> np.ndarray:
+        batch_size = len(self.question_ids)
+        header_size = np.dtype(np.uint32).itemsize  # 4 bytes for batch size
+        question_ids_size = batch_size * np.dtype(np.int64).itemsize
+
+        # ---- Compute metadata and variable segment sizes ----
+        # For images: store starting offset and shape (h, w)
+        image_offsets = []
+        image_shapes = []  # list of (h, w)
+        image_total_size = 0
+        for img in self.images:
+            image_offsets.append(image_total_size)
+            # Assuming each image is of shape (1, h, w)
+            _, h, w = img.shape
+            image_shapes.append((h, w))
+            image_total_size += img.size * img.dtype.itemsize
+
+        # For questions (UTF-8 encoded)
+        question_offsets = []
+        question_total_size = 0
+        for q in self.questions:
+            question_offsets.append(question_total_size)
+            q_len = utf8_length(q)
+            question_total_size += q_len
+
+        # For text sequences (UTF-8 encoded)
+        txt_offsets = []
+        txt_total_size = 0
+        for t in self.text_sequences:
+            txt_offsets.append(txt_total_size)
+            t_len = utf8_length(t)
+            txt_total_size += t_len
+
+        # Define metadata structure: 7 int64 values per sample.
+        metadata_dtype = np.dtype([
+            ("i_start", np.int64),   # start of image bytes
+            ("img_h",   np.int64),   # image height
+            ("img_w",   np.int64),   # image width
+            ("q_start", np.int64),   # start of question bytes
+            ("q_len",   np.int64),   # length of question bytes
+            ("txt_start", np.int64), # start of text sequence bytes
+            ("txt_len",   np.int64)  # length of text sequence bytes
+        ])
+        metadata_size = batch_size * metadata_dtype.itemsize
+
+        # Total size of the final buffer
+        total_size = (header_size + question_ids_size + metadata_size +
+                      image_total_size + question_total_size + txt_total_size)
+
+        # Allocate the contiguous buffer
+        buffer = np.zeros(total_size, dtype=np.uint8)
+        offset = 0
+
+        # ---- Write header ----
+        np.frombuffer(buffer[:header_size], dtype=np.uint32)[0] = batch_size
+        offset += header_size
+
+        # ---- Write question IDs ----
+        qid_array = np.frombuffer(buffer[offset:offset+question_ids_size], dtype=np.int64)
+        qid_array[:] = np.array(self.question_ids, dtype=np.int64)
+        offset += question_ids_size
+
+        # ---- Write metadata ----
+        metadata_start = offset
+        metadata_array = np.frombuffer(buffer[metadata_start:metadata_start+metadata_size],
+                                       dtype=metadata_dtype)
+        for i in range(batch_size):
+            metadata_array[i]["i_start"] = image_offsets[i]
+            metadata_array[i]["img_h"] = image_shapes[i][0]
+            metadata_array[i]["img_w"] = image_shapes[i][1]
+            metadata_array[i]["q_start"] = question_offsets[i]
+            metadata_array[i]["q_len"] = utf8_length(self.questions[i])
+            metadata_array[i]["txt_start"] = txt_offsets[i]
+            metadata_array[i]["txt_len"] = utf8_length(self.text_sequences[i])
+        offset += metadata_size
+
+        # ---- Write variable segments ----
+        # First, the concatenated image bytes.
+        for img in self.images:
+            img_bytes = img.tobytes()  # Convert image array to bytes.
+            n = len(img_bytes)
+            buffer[offset:offset+n] = np.frombuffer(img_bytes, dtype=np.uint8)
+            offset += n
+
+        # Next, the concatenated question strings (UTF-8 encoded).
+        for q in self.questions:
+            q_bytes = q.encode("utf-8")
+            n = len(q_bytes)
+            buffer[offset:offset+n] = np.frombuffer(q_bytes, dtype=np.uint8)
+            offset += n
+
+        # Finally, the concatenated text sequence strings (UTF-8 encoded).
+        for t in self.text_sequences:
+            t_bytes = t.encode("utf-8")
+            n = len(t_bytes)
+            buffer[offset:offset+n] = np.frombuffer(t_bytes, dtype=np.uint8)
+            offset += n
+
+        self._bytes = buffer
+        return buffer
+
+    def deserialize(self, data: np.ndarray):
+        self._bytes = data
+        buffer = data
+        offset = 0
+
+        # ---- Read header: batch size ----
+        header_size = np.dtype(np.uint32).itemsize
+        batch_size = int(np.frombuffer(buffer, dtype=np.uint32, count=1, offset=offset)[0])
+        offset += header_size
+
+        # ---- Read question IDs ----
+        question_ids_size = batch_size * np.dtype(np.int64).itemsize
+        self.question_ids = np.frombuffer(buffer, dtype=np.int64, count=batch_size, offset=offset).tolist()
+        offset += question_ids_size
+
+        # ---- Read metadata ----
+        metadata_dtype = np.dtype([
+            ("i_start", np.int64),
+            ("img_h",   np.int64),
+            ("img_w",   np.int64),
+            ("q_start", np.int64),
+            ("q_len",   np.int64),
+            ("txt_start", np.int64),
+            ("txt_len",   np.int64)
+        ])
+        metadata_size = batch_size * metadata_dtype.itemsize
+        metadata_array = np.frombuffer(buffer, dtype=metadata_dtype, count=batch_size, offset=offset)
+        offset += metadata_size
+
+        # ---- Determine the start of variable segments ----
+        # Here, we assume that variable segments are concatenated in order:
+        # images, then questions, then text sequences.
+        var_segment_start = offset
+
+        # Compute total sizes for each segment from metadata.
+        total_image_bytes = sum(int(np.prod((m["img_h"], m["img_w"])) * np.dtype(np.uint8).itemsize)
+                                for m in metadata_array)
+        total_question_bytes = sum(int(m["q_len"]) for m in metadata_array)
+        total_txt_bytes = sum(int(m["txt_len"]) for m in metadata_array)
+
+        # ---- Recover images ----
+        images_bytes = buffer[var_segment_start:var_segment_start+total_image_bytes]
+        image_offset = 0
+        self.images = []
+        for m in metadata_array:
+            h = int(m["img_h"])
+            w = int(m["img_w"])
+            num_bytes = h * w  # assuming image dtype is uint8 and shape is (1, h, w)
+            img_flat = np.frombuffer(images_bytes, dtype=np.uint8,
+                                     count=num_bytes, offset=image_offset)
+            img = img_flat.reshape((1, h, w))
+            self.images.append(img)
+            image_offset += num_bytes
+
+        # ---- Recover questions ----
+        q_segment_start = var_segment_start + total_image_bytes
+        questions_bytes = buffer[q_segment_start:q_segment_start+total_question_bytes]
+        question_offset = 0
+        self.questions = []
+        for m in metadata_array:
+            q_len = int(m["q_len"])
+            q_bytes = questions_bytes[question_offset:question_offset+q_len]
+            self.questions.append(q_bytes.tobytes().decode("utf-8"))
+            question_offset += q_len
+
+        # ---- Recover text sequences ----
+        txt_segment_start = q_segment_start + total_question_bytes
+        txt_bytes = buffer[txt_segment_start:txt_segment_start+total_txt_bytes]
+        txt_offset = 0
+        self.text_sequences = []
+        for m in metadata_array:
+            t_len = int(m["txt_len"])
+            t_bytes = txt_bytes[txt_offset:txt_offset+t_len]
+            self.text_sequences.append(t_bytes.tobytes().decode("utf-8"))
+            txt_offset += t_len
+
+    def print_data(self):
+        for i in range(len(self.question_ids)):
+            print(f"Question ID: {self.question_ids[i]}")
+            print(f"Question: {self.questions[i]}")
+            print(f"Text sequence: {self.text_sequences[i]}")
+            print(f"Image shape: {self.images[i].shape}")
 
 # ===============  Class and Serializer for Monolithic pipeline ===============
 
@@ -26,7 +218,6 @@ class MonoDataBatcher:
         self.input_ids = None           # np.ndarray of shape (batch_size, 32) and dtype=np.int64
         self.attention_mask = None      # np.ndarray of shape (batch_size, 32) and dtype=np.int64   
         self._bytes: np.ndarray = np.array([], dtype=np.uint8)
-    
     
     def serialize(self) -> np.ndarray:
         """
@@ -116,7 +307,6 @@ class MonoDataBatcher:
             buffer[pos:pos+n] = np.frombuffer(enc, dtype=np.uint8)
             pos += n
         offset += total_text_seq_size
-        
         self._bytes = buffer
         return buffer
     
@@ -569,8 +759,8 @@ class StepAResultBatchManager:
         """
         # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
         # # fixed already
-        # buffer = data.copy()
-        buffer = data
+        buffer = data.copy()
+        # buffer = data
         offset = 0
 
         # --- Read header ---
@@ -816,8 +1006,8 @@ class StepBResultBatchManager:
         """
         # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
         # # fixed already
-        # buffer = data.copy()
-        buffer = data
+        buffer = data.copy()
+        # buffer = data
         offset = 0
 
         # --- Read header ---
