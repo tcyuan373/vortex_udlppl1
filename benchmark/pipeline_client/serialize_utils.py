@@ -570,6 +570,7 @@ class StepAResultBatchManager:
         # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
         # # fixed already
         # buffer = data.copy()
+        buffer = data
         offset = 0
 
         # --- Read header ---
@@ -816,6 +817,7 @@ class StepBResultBatchManager:
         # # NOTE: need to create copy here to avoid buffer been overwriten, due to the aggregating mechanism required at this step
         # # fixed already
         # buffer = data.copy()
+        buffer = data
         offset = 0
 
         # --- Read header ---
