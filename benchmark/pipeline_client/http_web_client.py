@@ -18,15 +18,21 @@ from serialize_utils import MonoDataBatcher
 from torch.utils.data import DataLoader
     
     
-def get_images(example):
+def get_images(examples):
     images = []
     for img_path in example["img_path"]:
         if img_path is None:
             image = Image.new("RGB", (336, 336), color='black')
         else:
             image = Image.open(img_path).convert("RGB")
-        images.append(image)
-    return images
+        img_arr = np.array(image)
+        images.append(img_arr)
+        
+    img_np = np.stack(images, axis=0)
+    examples["img_np"] = img_np
+    examples["img_h"] = img_np.shape[1]
+    examples["img_w"] = img_np.shape[2]
+    return examples
 
 
 def add_path_prefix_in_img_path(example, prefix):
@@ -34,6 +40,29 @@ def add_path_prefix_in_img_path(example, prefix):
         example["img_path"] = os.path.join(prefix, example["img_path"])
     return example
 
+
+def prepare_text_sequence(sample):
+    sample = EasyDict(sample)
+
+    module = EasyDict(
+        {"type": "QuestionInput", "option": "default", "separation_tokens": {"start": "", "end": ""}}
+    )
+
+    instruction = sample.instruction.strip()
+    if instruction[-1] != ":":
+        instruction = instruction + ":"
+    instruction = instruction.replace(":", flmr_config.mask_instruction_token)
+    #random_instruction = random.choice(instructions)
+    text_sequence = " ".join(
+        [instruction]
+        + [module.separation_tokens.start]
+        + [sample.question]
+        + [module.separation_tokens.end]
+    )
+
+    sample["text_sequence"] = text_sequence
+
+    return sample
 
 
 if __name__ == "__main__":
@@ -67,8 +96,7 @@ if __name__ == "__main__":
     ds = ds.map(add_path_prefix_in_img_path, fn_kwargs={"prefix": image_root_dir})
     ds = ds.map(prepare_text_sequence)
     ds = ds.map(
-        tokenize_inputs,
-        fn_kwargs={"query_tokenizer": query_tokenizer, "image_processor": image_processor},
+        get_images,
         batched=True,
         batch_size=16,
         num_proc=16,
@@ -76,7 +104,7 @@ if __name__ == "__main__":
     
     ds.set_format(
         type="torch", 
-        columns=["input_ids", "attention_mask", "pixel_values", "text_sequence", "question_id", "question"]
+        columns=["img_np","text_sequence", "question_id", "question", "img_h", "img_w"]
     )
 
 
