@@ -189,7 +189,7 @@ class StepBEmitWorker:
         with self.cv:
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
-
+                self.parent.tl.log(20100, question_ids[i], 0, 0)
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 
                                                         vision_second_last_layer_hidden_states[i].view(), 
                                                         question_ids[i].view())
@@ -200,8 +200,8 @@ class StepBEmitWorker:
             if batch_manager.num_queries == 0:
                 continue
             
-            for qid in batch_manager.question_ids_list[:batch_manager.num_queries]:
-                    self.parent.tl.log(20100, qid, 0, 0)
+            # for qid in batch_manager.question_ids_list[:batch_manager.num_queries]:
+            #         self.parent.tl.log(20100, qid, 0, 0)
             # serialize the batch_manager
             num_sent = 0
             cur_shard_id = self.parent.stepb_next_udl_shards[idx]
