@@ -147,7 +147,6 @@ class StepBModelWorker:
                                                 batch.question_ids,
                                                 batch.num_pending)
             del vision_embeddings, vision_second_last_layer_hidden_states
-            batch.reset()
             for qid in batch.question_ids[:batch.num_pending]:
                 self.parent.tl.log(20041, qid, 0, 0)
                 
