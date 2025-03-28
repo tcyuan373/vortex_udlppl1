@@ -74,7 +74,8 @@ class MONOFLMR:
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
         }
-        query_embeddings = self.flmr_model.query(**query_input).late_interaction_output
+        with torch.no_grad():
+            query_embeddings = self.flmr_model.query(**query_input).late_interaction_output
         
         queries = dict(zip(question_ids, text_sequence))
         
