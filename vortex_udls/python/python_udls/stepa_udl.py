@@ -195,8 +195,6 @@ class StepAEmitWorker:
             num_sent = 0
             cur_shard_id = self.parent.stepa_next_udl_shards[idx]
             
-            for qid in batch_manager.question_ids[:batch_manager.num_queries]:
-                self.parent.tl.log(10100, qid, 0, batch_manager.num_queries)
             
             while num_sent < batch_manager.num_queries:
                 serialize_batch_size = min(self.max_emit_batch_size, batch_manager.num_queries - num_sent)
@@ -205,7 +203,9 @@ class StepAEmitWorker:
                 serialized_batch = batch_manager.serialize(start_pos, end_pos)
                 new_key = STEPA_NEXT_UDL_PREFIX + str(self.parent.sent_msg_count)
                 self.parent.sent_msg_count += 1
-                
+                for qid in batch_manager.question_ids[start_pos:end_pos]:
+                    self.parent.tl.log(10100, qid, 0, end_pos-start_pos)
+            
                 self.parent.capi.put_nparray(new_key, serialized_batch, 
                                         subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
                                         subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
