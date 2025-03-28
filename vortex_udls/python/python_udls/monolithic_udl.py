@@ -128,7 +128,7 @@ class MonoModelWorker:
             cur_question_ids = batch.question_ids[:batch.num_pending]
             cur_text_sequence = batch.text_sequence[:batch.num_pending]
             for qid in cur_question_ids:
-                self.parent.tl.log(40031, qid, 0, 0)
+                self.parent.tl.log(40031, qid, 0, batch.num_pending)
             
             ranking_dict = self.mono_flmr.execFLMR(cur_input_ids, 
                                                    cur_attention_mask,
