@@ -7,7 +7,6 @@ from derecho.cascade.member_client import TimestampLogger
 from serialize_utils import MonoDataBatcher, PendingMonoBatcher
 from mono_flmr import MONOFLMR
 
-MONO_WORKER_INITIAL_PENDING_BATCHES = 3
 
 class MonoModelWorker:
     '''
@@ -24,7 +23,7 @@ class MonoModelWorker:
                                   self.parent.index_experiment_name,
                                   self.parent.checkpoint_path,
                                   self.parent.image_processor_name)
-        self.pending_batches = [PendingMonoBatcher(self.max_exe_batch_size) for _ in range(MONO_WORKER_INITIAL_PENDING_BATCHES)]
+        self.pending_batches = [PendingMonoBatcher(self.max_exe_batch_size) for _ in range(self.parent.num_pending_buffer)]
         
         self.current_batch = -1    # current batch idx that main is executing
         self.next_batch = 0        # next batch idx to add new data
@@ -162,6 +161,7 @@ class MonolithicUDL(UserDefinedLogic):
         self.max_exe_batch_size = int(self.conf.get("max_exe_batch_size", 16))
         self.batch_time_us = int(self.conf.get("batch_time_us", 1000))
         self.flush_qid = int(self.conf.get("flush_qid", 100))
+        self.num_pending_buffer = int(self.conf.get("num_pending_buffer", 10))
         self.model_worker = None
 
         

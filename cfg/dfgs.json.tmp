@@ -172,7 +172,8 @@
                         "image_processor_name":"openai/clip-vit-large-patch14",
                         "max_exe_batch_size":1,
                         "batch_time_us":100,
-                        "flush_qid":166999
+                        "flush_qid":166999,
+                        "num_pending_buffer":10
                     }],
                 "destinations": [{}]
             }
