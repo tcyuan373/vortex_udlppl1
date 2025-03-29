@@ -3,6 +3,7 @@ import numpy as np
 import json
 import threading
 import torch
+import time
 
 import cascade_context
 from derecho.cascade.udl import UserDefinedLogic
@@ -20,7 +21,7 @@ STEPD_NEXT_UDL_PREFIX = "/stepE"
 
 RESULTA_PREFIX = "/no_cache_stepD/resultA_"
 RESULTB_PREFIX = "/no_cache_stepD/resultB_"
-NUM_TRIES = 2
+NUM_TRIES = 5
 
 class StepCDModelWorker:
     '''
@@ -347,6 +348,8 @@ class StepCDUDL(UserDefinedLogic):
                     stepCD_intermediate_result._vision_second_last_layer_hidden_states = torch.Tensor(stepb_batcher.vision_second_last_layer_hidden_states[0])
                     collect_all =  True
                     break
+                else:
+                    time.sleep(0.00001)
                 
         
             
@@ -381,6 +384,8 @@ class StepCDUDL(UserDefinedLogic):
                     
                     collect_all = True
                     break
+                else:
+                    time.sleep(0.00001)
         
         if collect_all:
             self.tl.log(30011, qid, 3, 0)
