@@ -209,6 +209,9 @@ class StepAEmitWorker:
                     self.parent.tl.log(10100, qid, 0, end_pos-start_pos)
                 # Use hash put
                 self.parent.capi.put_nparray(new_key, serialized_batch, 
+                                        subgroup_type=STEPA_NEXT_UDL_SUBGROUP_TYPE, 
+                                        subgroup_index=STEPA_NEXT_UDL_SUBGROUP_INDEX, 
+                                        shard_index=cur_shard_id, 
                                         message_id=0, as_trigger=False, blocking=False) # async put
                 num_sent += serialize_batch_size
                 

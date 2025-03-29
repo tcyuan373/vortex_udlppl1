@@ -223,9 +223,6 @@ class StepBEmitWorker:
 
                 # Use object pool put normal put
                 self.parent.capi.put_nparray(new_key, serialized_batch, 
-                                            subgroup_type=STEPB_NEXT_UDL_SUBGROUP_TYPE, 
-                                            subgroup_index=STEPB_NEXT_UDL_SUBGROUP_INDEX, 
-                                            shard_index=cur_shard_id, 
                                             message_id=0, as_trigger=True, blocking=False) # async put
                 
                 num_sent += serialize_batch_size
