@@ -350,19 +350,16 @@ class StepCDUDL(UserDefinedLogic):
         #             break
         #         else:
         #             time.sleep(0.000001)
-                
-        
             
         if step_B_idx != -1:
             stepb_batcher = StepBResultBatchManager()
             qid = int(key[key.find("resultB_")+8:])
             self.tl.log(30010, qid, 2, 0)
             stepA_result_key = RESULTA_PREFIX + str(qid)
-            for i in range(NUM_TRIES):
+            while not collect_all:
                 # Get stepA result
                 res = self.capi.get(stepA_result_key)
-                if res:
-                    
+                if res:   
                     odict = res.get_result()
                     blob_a = odict["value"]
                     if len(blob_a) == 0:
