@@ -349,7 +349,7 @@ class StepCDUDL(UserDefinedLogic):
                     collect_all =  True
                     break
                 else:
-                    time.sleep(0.00001)
+                    time.sleep(0.000001)
                 
         
             
@@ -385,7 +385,7 @@ class StepCDUDL(UserDefinedLogic):
                     collect_all = True
                     break
                 else:
-                    time.sleep(0.00001)
+                    time.sleep(0.000001)
         
         if collect_all:
             self.tl.log(30011, qid, 3, 0)
