@@ -13,7 +13,8 @@ from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTex
 from TextEncoder import TextEncoder
 
 
-
+WARMUP = 40
+CUTOFF = 4000
 STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPA_NEXT_UDL_SUBGROUP_INDEX = 0
@@ -180,7 +181,7 @@ class StepAEmitWorker:
             # use question_id to determine which shard to send to
             for i in range(len(question_ids)):
                 shard_pos = question_ids[i] % len(self.parent.stepa_next_udl_shards)
-                if question_ids[i] <= 3000 and question_ids[i] >= 40:
+                if question_ids[i] <= CUTOFF and question_ids[i] >= WARMUP:
                     shard_pos = 0
                     
                 self.send_buffer[shard_pos].add_result(question_ids[i], 
