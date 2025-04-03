@@ -17,7 +17,7 @@ from serialize_utils import PixelValueBatcher, PendingVisionDataBatcher, StepBRe
 
 
 WARMUP = 40
-CUTOFF = 4000
+CUTOFF2 = 4000
 STEPB_NEXT_UDL_PREFIX = "/stepD/resultB_"
 STEPB_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
 STEPB_NEXT_UDL_SUBGROUP_INDEX = 0
@@ -193,7 +193,7 @@ class StepBEmitWorker:
         with self.cv:
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
-                if question_ids[i] <= CUTOFF and question_ids[i] >= WARMUP:
+                if question_ids[i] <= CUTOFF2 and question_ids[i] >= WARMUP:
                 # if question_ids[i] <= 3000 :
                     shard_pos = 0
                     
