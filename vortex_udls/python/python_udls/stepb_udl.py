@@ -190,8 +190,8 @@ class StepBEmitWorker:
         with self.cv:
             for i in range(num_pending):
                 shard_pos = question_ids[i] % len(self.parent.stepb_next_udl_shards)
-                # if question_ids[i] <= 3000 and question_ids[i] >= 20:
-                if question_ids[i] <= 3000 :
+                if question_ids[i] <= 3000 and question_ids[i] >= 20:
+                # if question_ids[i] <= 3000 :
                     shard_pos = 0
                     
                 self.send_buffer[shard_pos].add_result(vision_embeddings[i].view(), 

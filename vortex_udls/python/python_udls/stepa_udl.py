@@ -180,7 +180,7 @@ class StepAEmitWorker:
             # use question_id to determine which shard to send to
             for i in range(len(question_ids)):
                 shard_pos = question_ids[i] % len(self.parent.stepa_next_udl_shards)
-                if question_ids[i] <= 3000 :
+                if question_ids[i] <= 3000 and question_ids[i] >= 20:
                     shard_pos = 0
                     
                 self.send_buffer[shard_pos].add_result(question_ids[i], 
