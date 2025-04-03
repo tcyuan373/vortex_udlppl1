@@ -16,7 +16,7 @@ from VisionEncoder import VisionEncoder
 from serialize_utils import PixelValueBatcher, PendingVisionDataBatcher, StepBResultBatchManager
 
 
-WARMUP = 40
+WARMUP = 0
 CUTOFF2 = 4000
 STEPB_NEXT_UDL_PREFIX = "/stepD/resultB_"
 STEPB_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"

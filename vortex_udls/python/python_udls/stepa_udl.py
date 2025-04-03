@@ -13,7 +13,7 @@ from serialize_utils import TextDataBatcher, StepAResultBatchManager, PendingTex
 from TextEncoder import TextEncoder
 
 
-WARMUP = 40
+WARMUP = 0
 CUTOFF2 = 4000
 STEPA_NEXT_UDL_PREFIX = "/stepD/resultA_"
 STEPA_NEXT_UDL_SUBGROUP_TYPE = "VolatileCascadeStoreWithStringKey"
